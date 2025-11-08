@@ -1,13 +1,16 @@
-import os
-import time
-import psycopg2
-from psycopg2.extras import RealDictCursor
-from datetime import datetime
-from web3 import Web3
-from web3.middleware import ExtraDataToPOAMiddleware
-from typing import Dict, Optional
 import traceback
-import sys
+import os
+import requests
+import json
+from datetime import datetime, timedelta
+from web3 import Web3
+from typing import Dict, List, Optional, Tuple
+import time
+
+from web3.middleware import ExtraDataToPOAMiddleware
+import psycopg2  # <-- ADD THIS
+from psycopg2.extras import RealDictCursor
+from dotenv import load_dotenv
 
 LIQUIDATION_CALL_EVENT_ABI = {
     "anonymous": False,
@@ -40,27 +43,27 @@ GET_USER_ACCOUNT_DATA_ABI = {
 }
 
 
-class LiquidationWorker:
+class AaveLiquidationAnalyzer:
     def __init__(self, chain_id: int = 1):
-        """Initialize the worker with database and RPC connections"""
-        # Load configuration from environment variables
-        self.database_url = os.getenv('DATABASE_URL')
-        if not self.database_url:
-            raise ValueError("DATABASE_URL environment variable is required")
-            
-        self.rpc_url = os.getenv('PONDER_RPC_URL_1')
-        if not self.rpc_url:
-            raise ValueError("RPC_URL environment variable is required")
-            
-        self.chain_id = chain_id
+        """
+        Initialize the analyzer with RPC connection
 
-        
-        # Setup Web3
-        self.w3 = Web3(Web3.HTTPProvider(self.rpc_url))
-        if chain_id in [137, 10, 42161, 100]:  # PoA chains
-            self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
-        
-        # Aave v3 Pool addresses
+        Args:
+            chain_id: Chain ID (1 for mainnet, 137 for Polygon, etc.)
+        """
+        self.rpc_urls = {
+            1: "https://ethereum.blockpi.network/v1/rpc/85461383f782dd69cdba6ec4fb8cb52bf7c06aab",
+            137: "https://polygon.blockpi.network/v1/rpc/ea47c8a6ff881200f48a4e1e1c4f93e424730cb7",
+            42161: "https://arbitrum.blockpi.network/v1/rpc/c41b70d95f97f22e121c8a2ad569479de6b254a9",
+            43114: "https://avalanche.blockpi.network/v1/rpc/5f177cc088522e4e94be242f74368ff9c7644b01",
+            10: "https://optimism.blockpi.network/v1/rpc/12c72e6c551918922e82fb0cb088cc427f85ce67",
+            100: "https://gnosis.blockpi.network/v1/rpc/627d0c7e00b8ce88f62b3631d98931fb3c70bd43",
+            999: "http://65.21.85.180:8545"
+        }
+        load_dotenv('.env.local')
+        self.w3 = Web3(Web3.HTTPProvider(self.rpc_urls[chain_id]))
+        self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+        self.chain_id = chain_id
         self.pool_addresses = {
             1: "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",  # Ethereum
             137: "0x794a61358D6845594F94dc1DB02A252b5b4814aD",  # Polygon
@@ -71,6 +74,10 @@ class LiquidationWorker:
             999: "0xceCcE0EB9DD2Ef7996e01e25DD70e461F918A14b"
         }
 
+        self.database_url = os.getenv('DATABASE_URL')
+        if not self.database_url:
+            print("Warning: DATABASE_URL not set in .env.local. DB functions will fail.")
+
         self.pool_address = self.pool_addresses.get(chain_id)
         if not self.pool_address:
             raise ValueError(f"Unsupported chain ID: {chain_id}")
@@ -80,48 +87,154 @@ class LiquidationWorker:
             address=self.w3.to_checksum_address(self.pool_address),
             abi=[LIQUIDATION_CALL_EVENT_ABI, GET_USER_ACCOUNT_DATA_ABI]
         )
-        
-        print(f"✓ Worker initialized for chain {chain_id}")
-        print(f"✓ Pool address: {self.pool_address}")
 
-    def get_db_connection(self):
-        """Get a database connection"""
-        return psycopg2.connect(self.database_url, options="-c search_path=ponder_default")
+    def fetch_liquidations_from_db(self, limit: int = 5) -> List[Dict]:
+        """
+        Fetch pending liquidations from the Ponder Postgres database
+        """
+        if not self.database_url:
+            print("Error: DATABASE_URL is not configured.")
+            return []
 
-    def fetch_pending_liquidations(self, limit: int = 10):
-        """Fetch liquidations with PENDING analysis status"""
-        conn = self.get_db_connection()
+        formatted_events = []
+        conn = None
         try:
+            conn = psycopg2.connect(self.database_url)
+            with conn.cursor() as cur:
+                cur.execute("SET search_path TO public")
+
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("""
                     SELECT * FROM "LiquidationCall"
                     WHERE analysis_status = 'PENDING' OR analysis_status IS NULL
-                    ORDER BY block_number ASC
+                    ORDER BY "block_number" ASC
                     LIMIT %s
                 """, (limit,))
-                return cur.fetchall()
-        finally:
-            conn.close()
+                
+                records = cur.fetchall()
 
-    def get_user_account_data_at_block(self, user_address: str, block_number: int) -> Optional[Dict]:
-        """Get user account data at a specific block"""
+            if not records:
+                return []
+
+            # Format the DB records to match what analyze_liquidation_timeline expects
+            for record in records:
+                formatted_events.append({
+                    'tx_hash': record['transaction_hash'],
+                    'block_number': int(record['block_number']),
+                    'user_address': record['user'],
+                    'collateral_asset': record['collateral_asset'],
+                    'debt_asset': record['debt_asset'],
+                    'debt_covered': int(record['debt_to_cover']),
+                    'liquidated_collateral_amount': int(record['liquidated_collateral_amount']),
+                    'liquidator': record['liquidator'],
+                    # 'receive_atoken': record.get('receiveAToken'), # Use .get() for safety
+                    # 'liquidation_time': datetime.fromtimestamp(record['blockTimestamp'])
+                })
+            
+            formatted_events.sort(key=lambda x: x['block_number'], reverse=True)
+
+            return formatted_events
+
+        except Exception as e:
+            print(f"Error fetching from database: {e}")
+            traceback.print_exc()
+            return []
+        finally:
+            if conn:
+                conn.close()
+
+    # def find_latest_liquidation_events(self, max_blocks_to_search: int = 500000,
+    #                                    chunk_size: int = 10000, n_events: int = 5) -> List[Dict]:
+    #     """
+    #     Find the latest liquidation events by searching backwards from the latest block
+
+    #     Args:
+    #         max_blocks_to_search: Maximum number of blocks to search backwards
+    #         chunk_size: Number of blocks to search in each chunk
+
+    #     Returns:
+    #         List of liquidation events found
+    #     """
+    #     latest_block = self.w3.eth.block_number
+    #     print(f"Latest block: {latest_block}")
+    #     print(f"Searching for liquidation events in chunks of {chunk_size} blocks...")
+
+    #     all_events = []
+
+    #     # Search backwards in chunks
+    #     for start_offset in range(0, max_blocks_to_search, chunk_size):
+    #         to_block = latest_block - start_offset
+    #         from_block = max(1, to_block - chunk_size + 1)
+
+    #         print(f"Searching blocks {from_block} to {to_block}...")
+
+    #         try:
+    #             # Create event filter for the specific block range
+    #             event_filter = self.pool_contract.events.LiquidationCall.create_filter(
+    #                 from_block=from_block,
+    #                 to_block=to_block
+    #             )
+
+    #             # Get all liquidation events in this range
+    #             events = event_filter.get_all_entries()
+
+    #             if events:
+    #                 print(f"Found {len(events)} liquidation events in blocks {from_block}-{to_block}")
+
+    #                 # Process events and add block info
+    #                 for event in events:
+    #                     event_data = {
+    #                         'tx_hash': event['transactionHash'].hex(),
+    #                         'block_number': event['blockNumber'],
+    #                         'user_address': event['args']['user'],
+    #                         'collateral_asset': event['args']['collateralAsset'],
+    #                         'debt_asset': event['args']['debtAsset'],
+    #                         'debt_covered': event['args']['debtToCover'],
+    #                         'liquidated_collateral_amount': event['args']['liquidatedCollateralAmount'],
+    #                         'liquidator': event['args']['liquidator'],
+    #                         'receive_atoken': event['args']['receiveAToken']
+    #                     }
+
+    #                     # Add timestamp
+    #                     block = self.w3.eth.get_block(event['blockNumber'])
+    #                     event_data['timestamp'] = block.timestamp
+    #                     event_data['liquidation_time'] = datetime.fromtimestamp(block.timestamp)
+
+    #                     all_events.append(event_data)
+
+    #             # Small delay to avoid rate limiting
+    #             time.sleep(0.1)
+
+    #             # If we found events, we can stop searching or continue based on needs
+    #             if all_events and len(all_events) >= n_events:  # Stop after finding 5 events
+    #                 print(f"Found {len(all_events)} events, stopping search.")
+    #                 break
+
+    #         except Exception as e:
+    #             print(f"Error searching blocks {from_block}-{to_block}: {e}")
+    #             continue
+
+    #     # Sort events by block number (most recent first)
+    #     all_events.sort(key=lambda x: x['block_number'], reverse=True)
+
+    #     return all_events
+
+    def get_user_account_data_at_block(self, user_address: str, block_number: int) -> Dict:
+        """
+        Get user account data at a specific block using the ABI
+        """
         try:
-            user_address = self.w3.to_checksum_address(user_address)
             result = self.pool_contract.functions.getUserAccountData(user_address).call(
                 block_identifier=block_number
             )
-            
+
+            # Unpack the tuple result
             (total_collateral, total_debt, available_borrows,
              liquidation_threshold, ltv, health_factor) = result
-            
+
+            # Health factor is in 18 decimals, convert to float
             health_factor_float = health_factor / 1e18 if health_factor > 0 else 0
 
-            # --- THIS IS THE 36-HOUR BUG FIX ---
-            # If a user has no debt, their HF is "infinite", not 0.
-            # A HF of 0 is only < 1.0 if total_debt is > 0.
-            if total_debt == 0:
-                health_factor_float = 999999999.0 # A very large number > 1.0
-            
             return {
                 'total_collateral': total_collateral / 1e8,  # Base currency (USD) with 8 decimals
                 'total_debt': total_debt / 1e8,
@@ -136,11 +249,15 @@ class LiquidationWorker:
             return None
 
     def binary_search_liquidatable_block(self, user_address: str, liquidation_block: int,
-                                        search_blocks_back: int = 10000) -> Optional[int]:
-        """Binary search to find first block where health factor < 1.0"""
+                                         search_blocks_back: int = 10000) -> Optional[int]:
+        """
+        Use binary search to find the first block where health factor < 1.0
+        """
         start_block = max(1, liquidation_block - search_blocks_back)
         end_block = liquidation_block
         first_liquidatable_block = None
+
+        print(f"Searching for first liquidatable block between {start_block} and {end_block}")
 
         while start_block <= end_block:
             mid_block = (start_block + end_block) // 2
@@ -155,177 +272,140 @@ class LiquidationWorker:
 
             if health_factor < 1.0:
                 first_liquidatable_block = mid_block
-                end_block = mid_block - 1 # Keep searching earlier
+                end_block = mid_block - 1
             else:
-                start_block = mid_block + 1 # Search later
-            
-            time.sleep(0.1)  # Rate limiting
-        
+                start_block = mid_block + 1
+
+            # Small delay to avoid rate limiting
+            time.sleep(0.1)
+
         return first_liquidatable_block
 
     def get_block_timestamp(self, block_number: int) -> datetime:
-        """Get timestamp for a block"""
+        """
+        Get timestamp for a block
+        """
         block = self.w3.eth.get_block(block_number)
         return datetime.fromtimestamp(block.timestamp)
 
-    def analyze_liquidation(self, liquidation_record: Dict) -> Optional[Dict]:
-        """Analyze a single liquidation record"""
-        print(f"\n  Analyzing liquidation: {liquidation_record['id']}")
-        print(f"  User: {liquidation_record['user']}")
-        print(f"  Block: {liquidation_record['block_number']}")
-        
-        try:
-            # Find first liquidatable block
-            first_liquidatable_block = self.binary_search_liquidatable_block(
-                liquidation_record['user'],
-                int(liquidation_record['block_number']),
-                search_blocks_back=10000 # ~33 hours
-            )
-            
-            # --- CRITICAL FIX ---
-            # 'block_timestamp' from Postgres (via psycopg2) is ALREADY a datetime object.
-            # We just use it directly.
-            liquidation_time = liquidation_record['block_timestamp']
+    def analyze_liquidation_timeline(self, liquidation_event: Dict, search_blocks_back: int = 10000) -> Dict:
+        """
+        Analyze how long a position was liquidatable for a given liquidation event
 
-            if first_liquidatable_block:
-                first_liquidatable_time = self.get_block_timestamp(first_liquidatable_block)
-                
-                time_liquidatable = liquidation_time - first_liquidatable_time
-                blocks_liquidatable = int(liquidation_record['block_number']) - first_liquidatable_block
-                
-                result = {
-                    'first_liquidatable_block': first_liquidatable_block,
-                    'first_liquidatable_time': int(first_liquidatable_time.timestamp()),
-                    'latency_seconds': int(time_liquidatable.total_seconds()), # Renamed from 'time_liquidatable_seconds'
-                    'blocks_liquidatable': blocks_liquidatable
-                }
-                
-                print(f"  ✓ Analysis Complete:")
-                print(f"    Liquidation block: {liquidation_record['block_number']} ({liquidation_time})")
-                print(f"    First liquidatable block: {first_liquidatable_block} ({first_liquidatable_time})")
-                print(f"    Calculated Latency: {time_liquidatable}")
-                                
-                return result
-            else:
-                # This means HF was > 1.0 for all 10,000 blocks.
-                # This implies a flash-liquidation or self-liquidation. Latency is 0.
-                print(f"  ✓ Analysis Complete: Position was not liquidatable in search window. Assuming 0s latency.")
-                return {
-                    'first_liquidatable_block': liquidation_record['block_number'],
-                    'first_liquidatable_time': int(liquidation_time.timestamp()),
-                    'latency_seconds': 0,
-                    'blocks_liquidatable': 0
-                }
-                
-        except Exception as e:
-            print(f"  ✗ Error analyzing liquidation: {e}")
-            traceback.print_exc()
-            return None
+        Args:
+            liquidation_event: Event data from find_latest_liquidation_events
+            search_blocks_back: How many blocks to search back for first liquidatable block
+        """
+        print(f"\nAnalyzing liquidation transaction: {liquidation_event['tx_hash']}")
+        print(f"User: {liquidation_event['user_address']}")
+        print(f"Liquidation block: {liquidation_event['block_number']}")
+        print(f"Liquidation time: {liquidation_event['liquidation_time']}")
 
-    def update_liquidation_analysis(self, liquidation_id: str, analysis_result: Optional[Dict]):
-        """Update the database with analysis results"""
-        
-        # --- CRITICAL FIX ---
-        # Removed all `ALTER TABLE` commands.
-        # Ponder's schema migration (`ponder.schema.ts`) already did this.
-        
-        conn = self.get_db_connection()
-        try:
-            with conn.cursor() as cur:
-                if analysis_result:
-                    cur.execute("""
-                        UPDATE "LiquidationCall"
-                        SET analysis_status = 'COMPLETE',
-                            first_liquidatable_block = %s,
-                            first_liquidatable_timestamp = %s,
-                            latency_seconds = %s,
-                            blocks_liquidatable = %s
-                        WHERE id = %s
-                    """, (
-                        analysis_result['first_liquidatable_block'],
-                        analysis_result['first_liquidatable_time'],
-                        analysis_result['latency_seconds'],
-                        analysis_result['blocks_liquidatable'],
-                        liquidation_id
-                    ))
-                else:
-                    # Mark as failed
-                    cur.execute("""
-                        UPDATE "LiquidationCall"
-                        SET analysis_status = 'FAILED'
-                        WHERE id = %s
-                    """, (liquidation_id,))
-                
-                conn.commit()
-                print(f"  ✓ Database updated for {liquidation_id}")
-                
-        except Exception as e:
-            conn.rollback()
-            print(f"  ✗ Error updating database: {e}")
-            traceback.print_exc()
-        finally:
-            conn.close()
+        # Find first block where position became liquidatable
+        first_liquidatable_block = self.binary_search_liquidatable_block(
+            liquidation_event['user_address'],
+            liquidation_event['block_number'],
+            search_blocks_back
+        )
 
-    def process_batch(self, batch_size: int = 5):
-        """Process a batch of pending liquidations"""
-        liquidations = self.fetch_pending_liquidations(limit=batch_size)
-        
-        if not liquidations:
-            print("No pending liquidations found")
-            return 0
-        
-        print(f"\n=== Processing {len(liquidations)} liquidations ===")
-        
-        processed = 0
-        for liquidation in liquidations:
-            analysis_result = self.analyze_liquidation(liquidation)
-            self.update_liquidation_analysis(liquidation['id'], analysis_result)
-            processed += 1
-            
-            # Small delay between analyses to be kind to RPC
-            time.sleep(1) 
-        
-        return processed
+        if first_liquidatable_block:
+            first_liquidatable_time = self.get_block_timestamp(first_liquidatable_block)
+            time_liquidatable = liquidation_event['liquidation_time'] - first_liquidatable_time
+            blocks_liquidatable = liquidation_event['block_number'] - first_liquidatable_block
 
-    def run_continuously(self, batch_size: int = 5, sleep_interval: int = 30):
-        """Run the worker continuously"""
-        print(f"\n=== Starting Liquidation Analysis Worker ===")
-        print(f"Batch size: {batch_size}")
-        print(f"Sleep interval: {sleep_interval}s")
-        
-        while True:
+            result = {
+                'liquidation_tx': liquidation_event['tx_hash'],
+                'user_address': liquidation_event['user_address'],
+                'liquidation_block': liquidation_event['block_number'],
+                'liquidation_time': liquidation_event['liquidation_time'],
+                'first_liquidatable_block': first_liquidatable_block,
+                'first_liquidatable_time': first_liquidatable_time,
+                'time_liquidatable': time_liquidatable,
+                'blocks_liquidatable': blocks_liquidatable,
+                'collateral_asset': liquidation_event['collateral_asset'],
+                'debt_asset': liquidation_event['debt_asset'],
+                'debt_covered': liquidation_event['debt_covered'],
+                'liquidated_collateral_amount': liquidation_event['liquidated_collateral_amount']
+            }
+
+            print(f"\n=== RESULTS ===")
+            print(f"Position became liquidatable at block: {first_liquidatable_block}")
+            print(f"First liquidatable time: {first_liquidatable_time}")
+            print(f"Liquidation occurred at block: {liquidation_event['block_number']}")
+            print(f"Liquidation time: {liquidation_event['liquidation_time']}")
+            print(f"Position was liquidatable for: {time_liquidatable}")
+            print(f"Blocks liquidatable: {blocks_liquidatable}")
+
+            return result
+        else:
+            return {"error": "Could not find when position became liquidatable"}
+
+    def analyze_latest_liquidations(self, num_liquidations: int = 5) -> List[Dict]:
+        """
+        Find and analyze the latest liquidations automatically
+
+        Args:
+            num_liquidations: Number of latest liquidations to analyze
+        """
+        print("=== FINDING LATEST LIQUIDATION EVENTS ===")
+
+        # Find latest liquidation events
+        events = self.find_latest_liquidation_events(n_events=num_liquidations)
+
+        if not events:
+            print("No liquidation events found!")
+            return []
+
+        print(f"\nFound {len(events)} liquidation events")
+        print("=== ANALYZING LIQUIDATION TIMELINES ===")
+
+        results = []
+
+        # Analyze up to num_liquidations events
+        for i, event in enumerate(events[:num_liquidations]):
+            print(f"\n--- Analyzing Liquidation {i + 1}/{min(num_liquidations, len(events))} ---")
+
             try:
-                processed = self.process_batch(batch_size)
-                
-                if processed == 0:
-                    print(f"\nNo work to do. Sleeping for {sleep_interval}s...")
+                result = self.analyze_liquidation_timeline(event)
+                if "error" not in result:
+                    results.append(result)
+                    print(f"✓ Analysis complete for tx: {event['tx_hash']}")
                 else:
-                    print(f"\n✓ Processed {processed} liquidations")
-                    print(f"Sleeping for {sleep_interval}s...")
-                
-                time.sleep(sleep_interval)
-                
-            except KeyboardInterrupt:
-                print("\n\nShutting down worker...")
-                break
+                    print(f"✗ Error analyzing tx {event['tx_hash']}: {result['error']}")
             except Exception as e:
-                print(f"\n✗ Unexpected error: {e}")
-                traceback.print_exc()
-                print(f"Sleeping for {sleep_interval}s before retry...")
-                time.sleep(sleep_interval)
+                print(f"✗ Exception analyzing tx {event['tx_hash']}: {e}")
+                continue
+
+        return results
 
 
+# Example usage
 def main():
-    # Load configuration from environment variables
+    # Configuration
+    CHAIN_ID = 999
 
-    CHAIN_ID = int(os.getenv('CHAIN_ID', '1')) # Default to Ethereum
-    BATCH_SIZE = int(os.getenv('BATCH_SIZE', '5'))
-    SLEEP_INTERVAL = int(os.getenv('SLEEP_INTERVAL', '30'))
-    
-    
-    # Initialize and run worker
-    worker = LiquidationWorker(CHAIN_ID)
-    worker.run_continuously(batch_size=BATCH_SIZE, sleep_interval=SLEEP_INTERVAL)
+    try:
+        analyzer = AaveLiquidationAnalyzer(CHAIN_ID)
+
+        # Automatically find and analyze the latest liquidations
+        results = analyzer.analyze_latest_liquidations(num_liquidations=25)
+
+        print("\n=== FINAL SUMMARY ===")
+        print(f"Analyzed {len(results)} liquidations successfully:")
+
+        for i, result in enumerate(results, 1):
+            print(f"\nLiquidation {i}:")
+            print(f"  TX: {result['liquidation_tx']}")
+            print(f"  User: {result['user_address']}")
+            print(f"  Time liquidatable: {result['time_liquidatable']}")
+            print(f"  Blocks liquidatable: {result['blocks_liquidatable']}")
+
+        if not results:
+            print("No liquidations were successfully analyzed.")
+
+    except Exception as e:
+        print(f"Error: {e}")
+        traceback.print_exc()
 
 
 if __name__ == "__main__":

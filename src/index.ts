@@ -11,14 +11,14 @@ ponder.on("AaveV3Pool:LiquidationCall", async ({ event, context }) => {
     id: id,
     user: args.user,
     liquidator: args.liquidator,
-    collateralAsset: args.collateralAsset,
-    debtAsset: args.debtAsset,
-    debtToCover: args.debtToCover,
-    liquidatedCollateralAmount: args.liquidatedCollateralAmount,
-    blockTimestamp: Number(event.block.timestamp),
-    blockNumber: event.block.number,
-    transactionHash: event.transaction.hash,
-    analysisStatus: 'PENDING'
+    collateral_asset: args.collateralAsset,
+    debt_asset: args.debtAsset,
+    debt_to_cover: args.debtToCover,
+    liquidated_collateral_amount: args.liquidatedCollateralAmount,
+    block_timestamp: Number(event.block.timestamp),
+    block_number: event.block.number,
+    transaction_hash: event.transaction.hash,
+    analysis_status: 'PENDING'
   });
   console.log(`Block ${event.block.number}} indexed`)
 });

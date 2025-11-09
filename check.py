@@ -1,14 +1,12 @@
 import traceback
 import os
-import requests
-import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from web3 import Web3
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 import time
 
 from web3.middleware import ExtraDataToPOAMiddleware
-import psycopg2  # <-- ADD THIS
+import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 
@@ -127,12 +125,9 @@ class AaveLiquidationAnalyzer:
                     'debt_covered': int(record['debt_to_cover']),
                     'liquidated_collateral_amount': int(record['liquidated_collateral_amount']),
                     'liquidator': record['liquidator'],
-                    # 'receive_atoken': record.get('receiveAToken'), # Use .get() for safety
+                    'receive_atoken': record.get('receiveAToken'), # Use .get() for safety
                     # 'liquidation_time': datetime.fromtimestamp(record['blockTimestamp'])
                 })
-            
-            formatted_events.sort(key=lambda x: x['block_number'], reverse=True)
-
             return formatted_events
 
         except Exception as e:
@@ -143,88 +138,68 @@ class AaveLiquidationAnalyzer:
             if conn:
                 conn.close()
 
-    # def find_latest_liquidation_events(self, max_blocks_to_search: int = 500000,
-    #                                    chunk_size: int = 10000, n_events: int = 5) -> List[Dict]:
-    #     """
-    #     Find the latest liquidation events by searching backwards from the latest block
+    def find_latest_liquidation_events(self, max_blocks_to_search: int = 500000,
+                                       chunk_size: int = 10000, n_events: int = 5) -> List[Dict]:
+        """
+        Find the latest liquidation events by searching backwards from the latest block
 
-    #     Args:
-    #         max_blocks_to_search: Maximum number of blocks to search backwards
-    #         chunk_size: Number of blocks to search in each chunk
+        Args:
+            max_blocks_to_search: Maximum number of blocks to search backwards
+            chunk_size: Number of blocks to search in each chunk
 
-    #     Returns:
-    #         List of liquidation events found
-    #     """
-    #     latest_block = self.w3.eth.block_number
-    #     print(f"Latest block: {latest_block}")
-    #     print(f"Searching for liquidation events in chunks of {chunk_size} blocks...")
+        Returns:
+            List of liquidation events found
+        """
+        latest_block = self.w3.eth.block_number
+        print(f"Latest block: {latest_block}")
+        print(f"Searching for liquidation events in chunks of {chunk_size} blocks...")
 
-    #     all_events = []
+        all_events = []
 
-    #     # Search backwards in chunks
-    #     for start_offset in range(0, max_blocks_to_search, chunk_size):
-    #         to_block = latest_block - start_offset
-    #         from_block = max(1, to_block - chunk_size + 1)
+        # Search backwards in chunks
+        for start_offset in range(0, max_blocks_to_search, chunk_size):
+            to_block = latest_block - start_offset
+            from_block = max(1, to_block - chunk_size + 1)
 
-    #         print(f"Searching blocks {from_block} to {to_block}...")
+            print(f"Searching blocks {from_block} to {to_block}...")
 
-    #         try:
-    #             # Create event filter for the specific block range
-    #             event_filter = self.pool_contract.events.LiquidationCall.create_filter(
-    #                 from_block=from_block,
-    #                 to_block=to_block
-    #             )
+            try:
+                events = self.fetch_liquidations_from_db()
+                if events:
+                    print(f"Found {len(events)} liquidation events in blocks {from_block}-{to_block}")
 
-    #             # Get all liquidation events in this range
-    #             events = event_filter.get_all_entries()
+                    # Process events and add block info
+                    for event_data in events:
+                        print(event_data)
+                        block = self.w3.eth.get_block(event_data['block_number'])
+                        event_data['timestamp'] = block.timestamp
+                        event_data['liquidation_time'] = datetime.fromtimestamp(block.timestamp)
 
-    #             if events:
-    #                 print(f"Found {len(events)} liquidation events in blocks {from_block}-{to_block}")
+                        all_events.append(event_data)
 
-    #                 # Process events and add block info
-    #                 for event in events:
-    #                     event_data = {
-    #                         'tx_hash': event['transactionHash'].hex(),
-    #                         'block_number': event['blockNumber'],
-    #                         'user_address': event['args']['user'],
-    #                         'collateral_asset': event['args']['collateralAsset'],
-    #                         'debt_asset': event['args']['debtAsset'],
-    #                         'debt_covered': event['args']['debtToCover'],
-    #                         'liquidated_collateral_amount': event['args']['liquidatedCollateralAmount'],
-    #                         'liquidator': event['args']['liquidator'],
-    #                         'receive_atoken': event['args']['receiveAToken']
-    #                     }
+                time.sleep(0.1)
+                if all_events and len(all_events) >= n_events:
+                    print(f"Found {len(all_events)} events, stopping search.")
+                    break
 
-    #                     # Add timestamp
-    #                     block = self.w3.eth.get_block(event['blockNumber'])
-    #                     event_data['timestamp'] = block.timestamp
-    #                     event_data['liquidation_time'] = datetime.fromtimestamp(block.timestamp)
+            except Exception as e:
+                traceback.print_exc()
+                print(f"Error searching blocks {from_block}-{to_block}: {e}")
+                continue
 
-    #                     all_events.append(event_data)
+        # Sort events by block number (most recent first)
+        all_events.sort(key=lambda x: x['block_number'], reverse=True)
 
-    #             # Small delay to avoid rate limiting
-    #             time.sleep(0.1)
-
-    #             # If we found events, we can stop searching or continue based on needs
-    #             if all_events and len(all_events) >= n_events:  # Stop after finding 5 events
-    #                 print(f"Found {len(all_events)} events, stopping search.")
-    #                 break
-
-    #         except Exception as e:
-    #             print(f"Error searching blocks {from_block}-{to_block}: {e}")
-    #             continue
-
-    #     # Sort events by block number (most recent first)
-    #     all_events.sort(key=lambda x: x['block_number'], reverse=True)
-
-    #     return all_events
+        return all_events
 
     def get_user_account_data_at_block(self, user_address: str, block_number: int) -> Dict:
         """
         Get user account data at a specific block using the ABI
         """
         try:
-            result = self.pool_contract.functions.getUserAccountData(user_address).call(
+            result = self.pool_contract.functions.getUserAccountData(
+                self.w3.to_checksum_address(user_address)
+            ).call(
                 block_identifier=block_number
             )
 
@@ -245,6 +220,7 @@ class AaveLiquidationAnalyzer:
                 'block_number': block_number
             }
         except Exception as e:
+            traceback.print_exc()
             print(f"Error getting account data at block {block_number}: {e}")
             return None
 
@@ -328,7 +304,7 @@ class AaveLiquidationAnalyzer:
                 'liquidated_collateral_amount': liquidation_event['liquidated_collateral_amount']
             }
 
-            print(f"\n=== RESULTS ===")
+            print("\n=== RESULTS ===")
             print(f"Position became liquidatable at block: {first_liquidatable_block}")
             print(f"First liquidatable time: {first_liquidatable_time}")
             print(f"Liquidation occurred at block: {liquidation_event['block_number']}")
@@ -371,8 +347,10 @@ class AaveLiquidationAnalyzer:
                     results.append(result)
                     print(f"✓ Analysis complete for tx: {event['tx_hash']}")
                 else:
+                    traceback.print_exc()
                     print(f"✗ Error analyzing tx {event['tx_hash']}: {result['error']}")
             except Exception as e:
+                traceback.print_exc()
                 print(f"✗ Exception analyzing tx {event['tx_hash']}: {e}")
                 continue
 
@@ -381,14 +359,25 @@ class AaveLiquidationAnalyzer:
 
 # Example usage
 def main():
+
     # Configuration
-    CHAIN_ID = 999
+    CHAIN_ID = int(os.getenv('CHAIN_ID', '1'))  # Default to Ethereum mainnet
+    BATCH_SIZE = int(os.getenv('BATCH_SIZE', '5'))
+    SEARCH_BLOCKS_BACK = int(os.getenv('SEARCH_BLOCKS_BACK', '50000'))
+
+    print("Configuration:")
+    print(f"  Chain ID: {CHAIN_ID}")
+    print(f"  Batch Size: {BATCH_SIZE}")
+    print(f"  Search Blocks Back: {SEARCH_BLOCKS_BACK}")
+    print()
 
     try:
         analyzer = AaveLiquidationAnalyzer(CHAIN_ID)
 
-        # Automatically find and analyze the latest liquidations
-        results = analyzer.analyze_latest_liquidations(num_liquidations=25)
+        # Analyze pending liquidations from database
+        results = analyzer.analyze_latest_liquidations(
+            num_liquidations=BATCH_SIZE,
+        )
 
         print("\n=== FINAL SUMMARY ===")
         print(f"Analyzed {len(results)} liquidations successfully:")

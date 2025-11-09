@@ -11,9 +11,9 @@ export const LiquidationCall = onchainTable("LiquidationCall", (t) => ({
   block_timestamp: t.integer(),
   block_number: t.bigint(),
   transaction_hash: t.hex(),
-  analysis_status: t.text().default('PENDING'), // PENDING, COMPLETE, FAILED
+  analysis_status: t.text().default('PENDING'),
   first_liquidatable_block: t.bigint(),
-  first_liquidatable_timestamp: t.integer(), // Unix timestamp
+  first_liquidatable_time: t.timestamp(),
   latency_seconds: t.integer(),
   blocks_liquidatable: t.integer(),
 }));

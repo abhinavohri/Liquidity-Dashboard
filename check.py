@@ -108,7 +108,7 @@ class AaveLiquidationAnalyzer:
                     ORDER BY "block_number" ASC
                     LIMIT %s
                 """, (limit,))
-                
+
                 records = cur.fetchall()
 
             if not records:
@@ -134,6 +134,91 @@ class AaveLiquidationAnalyzer:
             print(f"Error fetching from database: {e}")
             traceback.print_exc()
             return []
+        finally:
+            if conn:
+                conn.close()
+
+    def update_liquidation_analysis(self, tx_hash: str, analysis_result: Dict) -> bool:
+        """
+        Update the liquidation record with analysis results
+        """
+        if not self.database_url:
+            print("Error: DATABASE_URL is not configured.")
+            return False
+
+        conn = None
+        try:
+            conn = psycopg2.connect(self.database_url)
+            with conn.cursor() as cur:
+                cur.execute("SET search_path TO public")
+
+                # Update the liquidation record with analysis data
+                cur.execute("""
+                    UPDATE "LiquidationCall"
+                    SET
+                        analysis_status = %s,
+                        first_liquidatable_block = %s,
+                        first_liquidatable_time = %s,
+                        latency_seconds = %s,
+                        blocks_liquidatable = %s
+                    WHERE transaction_hash = %s
+                """, (
+                    'ANALYZED',
+                    analysis_result.get('first_liquidatable_block'),
+                    analysis_result.get('first_liquidatable_time'),
+                    int(analysis_result.get('time_liquidatable').total_seconds()) if analysis_result.get('time_liquidatable') else None,
+                    analysis_result.get('blocks_liquidatable'),
+                    tx_hash
+                ))
+
+                conn.commit()
+                print(f"✓ Updated analysis for tx: {tx_hash}")
+                return True
+
+        except Exception as e:
+            print(f"Error updating database for tx {tx_hash}: {e}")
+            traceback.print_exc()
+            if conn:
+                conn.rollback()
+            return False
+        finally:
+            if conn:
+                conn.close()
+
+    def mark_liquidation_failed(self, tx_hash: str, error_message: str) -> bool:
+        """
+        Mark a liquidation analysis as failed
+        """
+        if not self.database_url:
+            print("Error: DATABASE_URL is not configured.")
+            return False
+
+        conn = None
+        try:
+            conn = psycopg2.connect(self.database_url)
+            with conn.cursor() as cur:
+                cur.execute("SET search_path TO public")
+
+                cur.execute("""
+                    UPDATE "LiquidationCall"
+                    SET
+                        analysis_status = %s
+                    WHERE transaction_hash = %s
+                """, (
+                    'FAILED',
+                    tx_hash
+                ))
+
+                conn.commit()
+                print(f"✓ Marked tx as failed: {tx_hash}")
+                return True
+
+        except Exception as e:
+            print(f"Error marking tx as failed {tx_hash}: {e}")
+            traceback.print_exc()
+            if conn:
+                conn.rollback()
+            return False
         finally:
             if conn:
                 conn.close()
@@ -170,7 +255,6 @@ class AaveLiquidationAnalyzer:
 
                     # Process events and add block info
                     for event_data in events:
-                        print(event_data)
                         block = self.w3.eth.get_block(event_data['block_number'])
                         event_data['timestamp'] = block.timestamp
                         event_data['liquidation_time'] = datetime.fromtimestamp(block.timestamp)
@@ -346,12 +430,17 @@ class AaveLiquidationAnalyzer:
                 if "error" not in result:
                     results.append(result)
                     print(f"✓ Analysis complete for tx: {event['tx_hash']}")
+
+                    self.update_liquidation_analysis(event['tx_hash'], result)
                 else:
                     traceback.print_exc()
                     print(f"✗ Error analyzing tx {event['tx_hash']}: {result['error']}")
+
+                    self.mark_liquidation_failed(event['tx_hash'], result['error'])
             except Exception as e:
                 traceback.print_exc()
                 print(f"✗ Exception analyzing tx {event['tx_hash']}: {e}")
+                self.mark_liquidation_failed(event['tx_hash'], str(e))
                 continue
 
         return results
@@ -364,34 +453,53 @@ def main():
     CHAIN_ID = int(os.getenv('CHAIN_ID', '1'))  # Default to Ethereum mainnet
     BATCH_SIZE = int(os.getenv('BATCH_SIZE', '5'))
     SEARCH_BLOCKS_BACK = int(os.getenv('SEARCH_BLOCKS_BACK', '50000'))
-
+    LOOP_INTERVAL = int(os.getenv('LOOP_INTERVAL', '60'))
+    RUN_ONCE = os.getenv('RUN_ONCE', 'false').lower() == 'true'
     print("Configuration:")
     print(f"  Chain ID: {CHAIN_ID}")
     print(f"  Batch Size: {BATCH_SIZE}")
     print(f"  Search Blocks Back: {SEARCH_BLOCKS_BACK}")
+    print(f"  Loop Interval: {LOOP_INTERVAL} seconds")
+    print(f"  Run Once: {RUN_ONCE}")
     print()
 
     try:
         analyzer = AaveLiquidationAnalyzer(CHAIN_ID)
 
-        # Analyze pending liquidations from database
-        results = analyzer.analyze_latest_liquidations(
-            num_liquidations=BATCH_SIZE,
-        )
+        iteration = 0
+        while True:
+            iteration += 1
+            print(f"\n{'='*60}")
+            print(f"=== ITERATION {iteration} - {datetime.now()} ===")
+            print(f"{'='*60}\n")
 
-        print("\n=== FINAL SUMMARY ===")
-        print(f"Analyzed {len(results)} liquidations successfully:")
+            # Analyze pending liquidations from database
+            results = analyzer.analyze_latest_liquidations(
+                num_liquidations=BATCH_SIZE,
+            )
 
-        for i, result in enumerate(results, 1):
-            print(f"\nLiquidation {i}:")
-            print(f"  TX: {result['liquidation_tx']}")
-            print(f"  User: {result['user_address']}")
-            print(f"  Time liquidatable: {result['time_liquidatable']}")
-            print(f"  Blocks liquidatable: {result['blocks_liquidatable']}")
+            print("\n=== ITERATION SUMMARY ===")
+            print(f"Analyzed {len(results)} liquidations successfully:")
 
-        if not results:
-            print("No liquidations were successfully analyzed.")
+            for i, result in enumerate(results, 1):
+                print(f"\nLiquidation {i}:")
+                print(f"  TX: {result['liquidation_tx']}")
+                print(f"  User: {result['user_address']}")
+                print(f"  Time liquidatable: {result['time_liquidatable']}")
+                print(f"  Blocks liquidatable: {result['blocks_liquidatable']}")
 
+            if not results:
+                print("No liquidations were successfully analyzed.")
+
+            if RUN_ONCE:
+                print("\nRUN_ONCE is enabled, exiting...")
+                break
+
+            print(f"\nSleeping for {LOOP_INTERVAL} seconds before next iteration...")
+            time.sleep(LOOP_INTERVAL)
+
+    except KeyboardInterrupt:
+        print("\n\nReceived interrupt signal, shutting down gracefully...")
     except Exception as e:
         print(f"Error: {e}")
         traceback.print_exc()

@@ -1,0 +1,87 @@
+:root {
+  --color-text: rgba(255, 255, 255, 0.87);
+  --color-text-secondary: #808080;
+  --border-color: rgba(255, 255, 255, 0.1);
+  --color-text-link: #646cff;
+  --color-text-link-hover: #535bf2;
+  --color-bg-page: #071311;
+  --color-bg-card: #071311;
+  --color-bg-button: var(--color-bg-card);
+
+  /* Typography */
+  --font-family-sans: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-size-base: 1em;
+  --font-size-h1: 3.2em;
+  --line-height-base: 1.5;
+  --line-height-heading: 1.1;
+
+  /* Spacing */
+  --spacing-btn-y: 0.6em;
+  --spacing-btn-x: 1.2em;
+
+  /* Borders & Surfaces */
+  --radius-md: 8px;
+  --border-interactive: var(--color-text-link);
+
+  /* === 2. GLOBAL STYLES (Applications) === */
+  
+  /* Apply base typography & colors */
+  font-family: var(--font-family-sans);
+  line-height: var(--line-height-base);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text);
+  background-color: var(--color-bg-page);
+  
+  /* Other global settings from your original file */
+  color-scheme: dark; /* Set to dark only */
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* === 3. COMPONENT & ELEMENT STYLES === */
+/* These styles consume the tokens defined above */
+
+a {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-link);
+  text-decoration: inherit;
+}
+a:hover {
+  color: var(--color-text-link-hover);
+}
+
+/* body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+} */
+
+h1 {
+  font-size: var(--font-size-h1);
+  line-height: var(--line-height-heading);
+}
+
+button {
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  padding: var(--spacing-btn-y) var(--spacing-btn-x);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  font-family: inherit;
+  background-color: var(--color-bg-button);
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  border-color: var(--border-interactive);
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}

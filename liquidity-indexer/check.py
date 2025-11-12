@@ -324,6 +324,7 @@ class AaveLiquidationAnalyzer:
             account_data = self.get_user_account_data_at_block(user_address, mid_block)
 
             if account_data is None:
+                print('WARN: couldnt fetch account data')
                 start_block = mid_block + 1
                 continue
 
@@ -338,8 +339,8 @@ class AaveLiquidationAnalyzer:
 
             # Small delay to avoid rate limiting
             time.sleep(0.1)
-
-        return first_liquidatable_block
+        print('first', first_liquidatable_block)
+        return first_liquidatable_block if first_liquidatable_block else liquidation_block
 
     def get_block_timestamp(self, block_number: int) -> datetime:
         """
@@ -446,7 +447,6 @@ class AaveLiquidationAnalyzer:
         return results
 
 
-# Example usage
 def main():
 
     # Configuration

@@ -19,5 +19,9 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      "react-x/no-class-component": "warn",
+      "react-dom/no-dangerously-set-innerhtml": "warn",
+    },
   },
 ])

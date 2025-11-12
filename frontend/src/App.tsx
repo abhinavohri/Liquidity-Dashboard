@@ -15,15 +15,15 @@ function App() {
             </Grid>
 
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-              <AnalyticsCard header='Collateral Liquidated' value="6.79"/>
+              <AnalyticsCard header='Collateral Liquidated' value="6.79" />
             </Grid>
 
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-              <AnalyticsCard header='Debt Repaid' value="6.17"/>
+              <AnalyticsCard header='Debt Repaid' value="6.17" />
             </Grid>
 
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-              <AnalyticsCard header='Nº of liquidators' value="43"/>
+              <AnalyticsCard header='Nº of liquidators' value="43" />
             </Grid>
           </Grid>
         </Box>

@@ -1,6 +1,7 @@
 import AnalyticsCard from "./components/AnalyticsCard";
 import Grid from '@mui/material/Grid';
 import Box from '@mui/material/Box';
+import LiquidationsTable from "./components/LiquidationsTable";
 
 function App() {
 
@@ -27,6 +28,7 @@ function App() {
             </Grid>
           </Grid>
         </Box>
+        <LiquidationsTable />
       </div>
     </>
   )

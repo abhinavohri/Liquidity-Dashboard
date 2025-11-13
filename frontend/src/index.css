@@ -7,6 +7,7 @@
   --color-bg-page: #071311;
   --color-bg-card: #071311;
   --color-bg-button: var(--color-bg-card);
+  --color-bg-row: #111e1c;
 
   /* Typography */
   --font-family-sans: system-ui, Avenir, Helvetica, Arial, sans-serif;

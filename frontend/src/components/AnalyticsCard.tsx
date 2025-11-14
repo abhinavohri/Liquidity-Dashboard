@@ -15,10 +15,10 @@ export default function AnalyticsCard({ header, value }: AnalyticsCard) {
   return (
     <Card
       variant="outlined"
+      className="glass-border"
       sx={{
         backgroundColor: 'transparent',
-        border: '1px solid var(--border-color)',
-        borderRadius: 'var(--radius-md)'
+        borderRadius: 'var(--radius-md)',
       }}
     >
       <CardContent

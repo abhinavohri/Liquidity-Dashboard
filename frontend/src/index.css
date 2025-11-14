@@ -8,6 +8,7 @@
   --color-bg-card: #071311;
   --color-bg-button: var(--color-bg-card);
   --color-bg-row: #111e1c;
+  --color-header: #caeae5;
 
   /* Typography */
   --font-weight-regular: 400;
@@ -61,7 +62,7 @@ a:hover {
 h1 {
   font-size: var(--font-size-h1);
   line-height: var(--line-height-heading);
-  color: #caeae5;
+  color: var(--color-header);
 }
 
 button {
@@ -85,7 +86,15 @@ button:focus-visible {
 
 .main-container {
   width: 100%;
-  max-width: 1280px;
+  max-width: 1400px;
 
   margin: auto;
+}
+
+/* Card border effect */
+.glass-border {
+  /* border: 1px solid rgba(255, 255, 255, 0.15) !important; */
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 2px 8px rgba(0, 0, 0, 0.3) !important;
 }

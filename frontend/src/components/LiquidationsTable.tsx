@@ -109,12 +109,21 @@ export default function LiquidationsTable() {
     );
   }
 
+  const isNumericalColumn = (columnId: string) => {
+    return columnId === 'debt_to_cover' || columnId === 'block_timestamp';
+  };
+
   return (
-    <Paper sx={{ width: '100%', overflow: 'hidden' }}>
-      <TableContainer
-        sx={{ maxHeight: 440, border: '1px solid var(--border-color)' }}
-      >
-        <Table stickyHeader aria-label="sticky table">
+    <Paper
+      className="glass-border"
+      sx={{
+        width: '100%',
+        overflow: 'hidden',
+        borderRadius: 'var(--radius-md)',
+      }}
+    >
+      <TableContainer>
+        <Table className='glass-border' sx={{overflow: "hidden" }} stickyHeader aria-label="sticky table">
           <TableHead>
             <TableRow>
               {columns.map(column => (
@@ -123,8 +132,11 @@ export default function LiquidationsTable() {
                   align={column.align}
                   sx={{
                     minWidth: column.minWidth,
-                    color: 'var(--color-text-secondary)',
+                    color: 'var(--color-text)',
                     backgroundColor: 'var(--color-bg-card)',
+                    fontSize: '1.05rem',
+                    fontWeight: 500,
+                    borderBottom: '1px solid var(--border-color)',
                   }}
                 >
                   {column.label}
@@ -147,7 +159,21 @@ export default function LiquidationsTable() {
                   {columns.map(column => {
                     const value = row[column.id];
                     return (
-                      <TableCell key={column.id} align={column.align}>
+                      <TableCell
+                        key={column.id}
+                        align={column.align}
+                        sx={{
+                          fontSize: '1rem',
+                          color: isNumericalColumn(column.id)
+                            ? 'var(--color-text)'
+                            : 'var(--color-text-secondary)',
+                          borderBottom: '1px solid var(--border-color)',
+                          transition: 'color 0.15s ease',
+                          '&:hover': {
+                            color: 'var(--color-text)',
+                          },
+                        }}
+                      >
                         {column.format ? column.format(value) : value}
                       </TableCell>
                     );
@@ -162,6 +188,7 @@ export default function LiquidationsTable() {
         sx={{
           backgroundColor: 'var(--color-bg-row)',
           color: 'var(--color-text)',
+          borderTop: '1px solid var(--border-color)',
         }}
         rowsPerPageOptions={[10, 25, 100]}
         component="div"

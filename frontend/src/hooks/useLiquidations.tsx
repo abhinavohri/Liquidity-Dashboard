@@ -1,10 +1,10 @@
-import { usePonderQuery } from "@ponder/react";
-import { desc } from "@ponder/client";
-import { schema } from "../../lib/ponder";
+import { usePonderQuery } from '@ponder/react';
+import { desc } from '@ponder/client';
+import { schema } from '../../lib/ponder';
 
 export function useLiquidations(limit: number, offset: number) {
   const query = usePonderQuery({
-    queryFn: (db) =>
+    queryFn: db =>
       db
         .select()
         .from(schema.LiquidationCall as any)
@@ -14,7 +14,7 @@ export function useLiquidations(limit: number, offset: number) {
   });
 
   const countQuery = usePonderQuery({
-    queryFn: (db) => db.$count(schema.LiquidationCall as any),
+    queryFn: db => db.$count(schema.LiquidationCall as any),
   });
 
   return {

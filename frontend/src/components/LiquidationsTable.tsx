@@ -13,7 +13,14 @@ import Alert from '@mui/material/Alert';
 import { useLiquidations } from '../hooks/useLiquidations';
 
 interface Column {
-  id: 'user' | 'liquidator' | 'collateral_asset' | 'debt_asset' | 'debt_to_cover' | 'block_timestamp' | 'transaction_hash';
+  id:
+    | 'user'
+    | 'liquidator'
+    | 'collateral_asset'
+    | 'debt_asset'
+    | 'debt_to_cover'
+    | 'block_timestamp'
+    | 'transaction_hash';
   label: string;
   minWidth?: number;
   align?: 'right' | 'left';
@@ -25,25 +32,25 @@ const columns: readonly Column[] = [
     id: 'user',
     label: 'User',
     minWidth: 120,
-    format: (value: string) => `${value.slice(0, 6)}...${value.slice(-4)}`
+    format: (value: string) => `${value.slice(0, 6)}...${value.slice(-4)}`,
   },
   {
     id: 'liquidator',
     label: 'Liquidator',
     minWidth: 120,
-    format: (value: string) => `${value.slice(0, 6)}...${value.slice(-4)}`
+    format: (value: string) => `${value.slice(0, 6)}...${value.slice(-4)}`,
   },
   {
     id: 'collateral_asset',
     label: 'Collateral Asset',
     minWidth: 120,
-    format: (value: string) => `${value.slice(0, 6)}...${value.slice(-4)}`
+    format: (value: string) => `${value.slice(0, 6)}...${value.slice(-4)}`,
   },
   {
     id: 'debt_asset',
     label: 'Debt Asset',
     minWidth: 120,
-    format: (value: string) => `${value.slice(0, 6)}...${value.slice(-4)}`
+    format: (value: string) => `${value.slice(0, 6)}...${value.slice(-4)}`,
   },
   {
     id: 'debt_to_cover',
@@ -62,7 +69,7 @@ const columns: readonly Column[] = [
     id: 'transaction_hash',
     label: 'Tx Hash',
     minWidth: 120,
-    format: (value: string) => `${value.slice(0, 6)}...${value.slice(-4)}`
+    format: (value: string) => `${value.slice(0, 6)}...${value.slice(-4)}`,
   },
 ];
 
@@ -79,7 +86,9 @@ export default function LiquidationsTable() {
     setPage(newPage);
   };
 
-  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChangeRowsPerPage = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
     setRowsPerPage(+event.target.value);
     setPage(0);
   };
@@ -102,18 +111,20 @@ export default function LiquidationsTable() {
 
   return (
     <Paper sx={{ width: '100%', overflow: 'hidden' }}>
-      <TableContainer sx={{ maxHeight: 440, border: '1px solid var(--border-color)'}}>
+      <TableContainer
+        sx={{ maxHeight: 440, border: '1px solid var(--border-color)' }}
+      >
         <Table stickyHeader aria-label="sticky table">
           <TableHead>
             <TableRow>
-              {columns.map((column) => (
+              {columns.map(column => (
                 <TableCell
                   key={column.id}
                   align={column.align}
                   sx={{
                     minWidth: column.minWidth,
                     color: 'var(--color-text-secondary)',
-                    backgroundColor: 'var(--color-bg-card)'
+                    backgroundColor: 'var(--color-bg-card)',
                   }}
                 >
                   {column.label}
@@ -125,12 +136,15 @@ export default function LiquidationsTable() {
             {liquidations.map((row: any) => {
               return (
                 <TableRow
-                  sx={{ maxHeight: 440, backgroundColor: "var(--color-bg-row)"}}
+                  sx={{
+                    maxHeight: 440,
+                    backgroundColor: 'var(--color-bg-row)',
+                  }}
                   role="checkbox"
                   tabIndex={-1}
                   key={row.id}
                 >
-                  {columns.map((column) => {
+                  {columns.map(column => {
                     const value = row[column.id];
                     return (
                       <TableCell key={column.id} align={column.align}>
@@ -145,7 +159,10 @@ export default function LiquidationsTable() {
         </Table>
       </TableContainer>
       <TablePagination
-        sx={{backgroundColor: "var(--color-bg-row)", color: 'var(--color-text)'}}
+        sx={{
+          backgroundColor: 'var(--color-bg-row)',
+          color: 'var(--color-text)',
+        }}
         rowsPerPageOptions={[10, 25, 100]}
         component="div"
         count={totalCount}

@@ -11,6 +11,8 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Box from '@mui/material/Box';
 import Alert from '@mui/material/Alert';
 import { useLiquidations } from '../hooks/useLiquidations';
+import makeBlockie from 'ethereum-blockies-base64';
+
 
 interface Column {
   id:
@@ -24,7 +26,14 @@ interface Column {
   label: string;
   minWidth?: number;
   align?: 'right' | 'left';
-  format?: (value: any) => string;
+  format?: (value: any) => React.ReactNode;
+}
+
+const userColumn = (value: string) => {
+  return <Box sx={{ display: 'flex', gap: '10px', alignItems: 'center'}}>
+    <img className="blockie-icon" src={makeBlockie(value)} />
+    {value.slice(0, 6)}...{value.slice(-4)}
+  </Box>
 }
 
 const columns: readonly Column[] = [
@@ -32,13 +41,13 @@ const columns: readonly Column[] = [
     id: 'user',
     label: 'User',
     minWidth: 120,
-    format: (value: string) => `${value.slice(0, 6)}...${value.slice(-4)}`,
+    format: userColumn,
   },
   {
     id: 'liquidator',
     label: 'Liquidator',
     minWidth: 120,
-    format: (value: string) => `${value.slice(0, 6)}...${value.slice(-4)}`,
+    format: userColumn,
   },
   {
     id: 'collateral_asset',
@@ -163,7 +172,8 @@ export default function LiquidationsTable() {
                         key={column.id}
                         align={column.align}
                         sx={{
-                          fontSize: '1rem',
+                          fontSize: '1.1rem',
+                          fontWeight: '500',
                           color: isNumericalColumn(column.id)
                             ? 'var(--color-text)'
                             : 'var(--color-text-secondary)',

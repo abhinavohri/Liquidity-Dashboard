@@ -98,3 +98,8 @@ button:focus-visible {
     0 0 0 1px rgba(255, 255, 255, 0.05),
     0 2px 8px rgba(0, 0, 0, 0.3) !important;
 }
+
+.blockie-icon {
+  height: 35px;
+  border-radius: 50%;
+}

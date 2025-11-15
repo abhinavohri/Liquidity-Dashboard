@@ -40,6 +40,87 @@ GET_USER_ACCOUNT_DATA_ABI = {
     "type": "function",
 }
 
+UI_POOL_DATA_PROVIDER = "0x3F78BBD206e4D3c504Eb854232EdA7e47E9Fd8FC"
+
+POOL_DATA_PROVIDER = "0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e"
+
+GET_PRICE_ORACLE_ABI = {
+    "inputs": [],
+    "name": "getPriceOracle",
+    "outputs": [{"internalType": "address", "name": "", "type": "address"}],
+    "stateMutability": "view",
+    "type": "function",
+}
+
+RESERVE_DATA_STRUCT_ABI = {
+    "components": [
+        {"internalType": "address", "name": "underlyingAsset", "type": "address"},
+        {"internalType": "string", "name": "name", "type": "string"},
+        {"internalType": "string", "name": "symbol", "type": "string"},
+        {"internalType": "uint256", "name": "decimals", "type": "uint256"},
+        {"internalType": "uint256", "name": "baseLTVasCollateral", "type": "uint256"},
+        {"internalType": "uint256", "name": "liquidationThreshold", "type": "uint256"},
+        {"internalType": "uint256", "name": "liquidationBonus", "type": "uint256"},
+        {"internalType": "uint256", "name": "reserveFactor", "type": "uint256"},
+        {"internalType": "bool", "name": "usageAsCollateralEnabled", "type": "bool"},
+        {"internalType": "bool", "name": "borrowingEnabled", "type": "bool"},
+        {"internalType": "bool", "name": "stableBorrowRateEnabled", "type": "bool"},
+        {"internalType": "bool", "name": "isActive", "type": "bool"},
+        {"internalType": "bool", "name": "isFrozen", "type": "bool"},
+        {"internalType": "uint128", "name": "liquidityIndex", "type": "uint128"},
+        {"internalType": "uint128", "name": "variableBorrowIndex", "type": "uint128"},
+        {"internalType": "uint128", "name": "liquidityRate", "type": "uint128"},
+        {"internalType": "uint128", "name": "variableBorrowRate", "type": "uint128"},
+        {"internalType": "uint128", "name": "stableBorrowRate", "type": "uint128"},
+        {"internalType": "uint40", "name": "lastUpdateTimestamp", "type": "uint40"},
+        {"internalType": "address", "name": "aTokenAddress", "type": "address"},
+        {"internalType": "address", "name": "stableDebtTokenAddress", "type": "address"},
+        {"internalType": "address", "name": "variableDebtTokenAddress", "type": "address"},
+        {"internalType": "address", "name": "interestRateStrategyAddress", "type": "address"},
+        {"internalType": "uint256", "name": "availableLiquidity", "type": "uint256"},
+        {"internalType": "uint256", "name": "totalPrincipalStableDebt", "type": "uint256"},
+        {"internalType": "uint256", "name": "averageStableRate", "type": "uint256"},
+        {"internalType": "uint256", "name": "stableDebtLastUpdateTimestamp", "type": "uint256"},
+        {"internalType": "uint256", "name": "totalScalableVariableDebt", "type": "uint256"},
+        {"internalType": "uint256", "name": "unbacked", "type": "uint256"},
+        {"internalType": "uint256", "name": "isolationModeTotalDebt", "type": "uint256"},
+        {"internalType": "uint256", "name": "debtCeiling", "type": "uint256"},
+        {"internalType": "uint256", "name": "debtCeilingDecimals", "type": "uint256"},
+        {"internalType": "uint8", "name": "eModeId", "type": "uint8"},
+        {"internalType": "uint256", "name": "borrowCap", "type": "uint256"},
+        {"internalType": "uint256", "name": "supplyCap", "type": "uint256"},
+        {"internalType": "uint8", "name": "eModeLtv", "type": "uint8"},
+        {"internalType": "uint8", "name": "eModeLiquidationThreshold", "type": "uint8"},
+        {"internalType": "uint8", "name": "eModeLiquidationBonus", "type": "uint8"},
+        {"internalType": "address", "name": "eModePriceSource", "type": "address"},
+        {"internalType": "string", "name": "eModeLabel", "type": "string"},
+    ],
+    "internalType": "struct IUiPoolDataProviderV3.ReserveData[]",
+    "name": "reservesData",
+    "type": "tuple[]",
+}
+
+GET_RESERVES_DATA_ABI = {
+    "inputs": [{"internalType": "address", "name": "provider", "type": "address"}],
+    "name": "getReservesData",
+    "outputs": [
+        RESERVE_DATA_STRUCT_ABI,
+        {"components": [
+            {"internalType": "address", "name": "asset", "type": "address"},
+            {"internalType": "uint256", "name": "priceInEth", "type": "uint256"}
+        ], "internalType": "struct IUiPoolDataProviderV3.BaseCurrencyInfo[]", "name": "baseCurrencyInfo", "type": "tuple[]"}
+    ],
+    "stateMutability": "view",
+    "type": "function",
+}
+
+GET_ASSET_PRICE_ABI = {
+    "inputs": [{"internalType": "address", "name": "asset", "type": "address"}],
+    "name": "getAssetPrice",
+    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function",
+}
 
 class AaveLiquidationAnalyzer:
     def __init__(self, chain_id: int = 1):
@@ -58,6 +139,8 @@ class AaveLiquidationAnalyzer:
             100: "https://gnosis.blockpi.network/v1/rpc/627d0c7e00b8ce88f62b3631d98931fb3c70bd43",
             999: "http://65.21.85.180:8545"
         }
+
+        self.reserves_data_cache = {}
         load_dotenv('.env.local')
         self.w3 = Web3(Web3.HTTPProvider(self.rpc_urls[chain_id]))
         self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
@@ -85,6 +168,47 @@ class AaveLiquidationAnalyzer:
             address=self.w3.to_checksum_address(self.pool_address),
             abi=[LIQUIDATION_CALL_EVENT_ABI, GET_USER_ACCOUNT_DATA_ABI]
         )
+
+        self.ui_pool_data_provider_contract = self.w3.eth.contract(
+            address=self.w3.to_checksum_address(UI_POOL_DATA_PROVIDER),
+            abi=[GET_RESERVES_DATA_ABI]
+        )
+
+        self.fetch_all_reserves_data()
+
+        self.provider_contract = self.w3.eth.contract(
+            address=self.w3.to_checksum_address(POOL_DATA_PROVIDER),
+            abi=[GET_PRICE_ORACLE_ABI]
+        )
+
+        self.price_oracle_address = self.provider_contract.functions.getPriceOracle().call()
+
+        self.price_oracle_contract = self.w3.eth.contract(
+            address=self.w3.to_checksum_address(self.price_oracle_address),
+            abi=[GET_ASSET_PRICE_ABI]
+        )
+
+    def fetch_all_reserves_data(self):
+        try:
+            reserves_data = self.ui_pool_data_provider_contract.functions.getReservesData(
+                self.w3.to_checksum_address(POOL_DATA_PROVIDER)
+            ).call()
+
+            reserves_list = reserves_data[0]
+
+            for reserve in reserves_list:
+                asset_address = reserve[0]
+                asset_symbol = reserve[2]
+                asset_decimals = reserve[3]
+
+                print(f"Found: {asset_symbol} (Decimals: {asset_decimals}) at {asset_address}")
+                
+                self.reserves_data_cache[asset_address.lower()] = {
+                    "symbol": asset_symbol,
+                    "decimals": asset_decimals
+                }
+        except Exception as e:
+            print(f"Error in fetch_all_reserves_data: {str(e)}")
 
     def fetch_liquidations_from_db(self, limit: int = 5) -> List[Dict]:
         """
@@ -362,12 +486,34 @@ class AaveLiquidationAnalyzer:
         print(f"Liquidation block: {liquidation_event['block_number']}")
         print(f"Liquidation time: {liquidation_event['liquidation_time']}")
 
+        historical_block = liquidation_event['block_number']
+
+        raw_collateral_price = self.price_oracle_contract.functions.getAssetPrice(
+            self.w3.to_checksum_address(liquidation_event['collateral_asset'])
+        ).call(block_identifier=historical_block)
+
+        raw_debt_price = self.price_oracle_contract.functions.getAssetPrice(
+            self.w3.to_checksum_address(liquidation_event['debt_asset'])
+        ).call(block_identifier=historical_block)
+
+        collateral_price_usd = raw_collateral_price / (10**8)
+        debt_price_usd = raw_debt_price / (10**8)
+        
+        collateral_info = self.reserves_data_cache.get(liquidation_event['collateral_asset'].lower(), {})
+        debt_info = self.reserves_data_cache.get(liquidation_event['debt_asset'].lower(), {})
+
+        collateral_decimals = collateral_info.get('decimals')
+        collateral_symbol = collateral_info.get('symbol')
+        debt_decimals = debt_info.get('decimals')
+        debt_symbol = debt_info.get('symbol')
+        
         # Find first block where position became liquidatable
         first_liquidatable_block = self.binary_search_liquidatable_block(
             liquidation_event['user_address'],
             liquidation_event['block_number'],
             search_blocks_back
         )
+
 
         if first_liquidatable_block:
             first_liquidatable_time = self.get_block_timestamp(first_liquidatable_block)
@@ -384,9 +530,15 @@ class AaveLiquidationAnalyzer:
                 'time_liquidatable': time_liquidatable,
                 'blocks_liquidatable': blocks_liquidatable,
                 'collateral_asset': liquidation_event['collateral_asset'],
+                'collateral_symbol': collateral_symbol,
+                'collateral_decimals': collateral_decimals,
+                'collateral_price_usd': collateral_price_usd,
                 'debt_asset': liquidation_event['debt_asset'],
                 'debt_covered': liquidation_event['debt_covered'],
-                'liquidated_collateral_amount': liquidation_event['liquidated_collateral_amount']
+                'debt_symbol': debt_symbol,
+                'debt_decimals': debt_decimals,
+                'debt_price_usd': debt_price_usd,
+                'liquidated_collateral_amount': liquidation_event['liquidated_collateral_amount'],
             }
 
             print("\n=== RESULTS ===")
@@ -449,7 +601,6 @@ class AaveLiquidationAnalyzer:
 
 def main():
 
-    # Configuration
     CHAIN_ID = int(os.getenv('CHAIN_ID', '1'))  # Default to Ethereum mainnet
     BATCH_SIZE = int(os.getenv('BATCH_SIZE', '5'))
     SEARCH_BLOCKS_BACK = int(os.getenv('SEARCH_BLOCKS_BACK', '50000'))
@@ -461,7 +612,6 @@ def main():
     print(f"  Search Blocks Back: {SEARCH_BLOCKS_BACK}")
     print(f"  Loop Interval: {LOOP_INTERVAL} seconds")
     print(f"  Run Once: {RUN_ONCE}")
-    print()
 
     try:
         analyzer = AaveLiquidationAnalyzer(CHAIN_ID)

@@ -52,67 +52,260 @@ GET_PRICE_ORACLE_ABI = {
     "type": "function",
 }
 
-RESERVE_DATA_STRUCT_ABI = {
-    "components": [
-        {"internalType": "address", "name": "underlyingAsset", "type": "address"},
-        {"internalType": "string", "name": "name", "type": "string"},
-        {"internalType": "string", "name": "symbol", "type": "string"},
-        {"internalType": "uint256", "name": "decimals", "type": "uint256"},
-        {"internalType": "uint256", "name": "baseLTVasCollateral", "type": "uint256"},
-        {"internalType": "uint256", "name": "liquidationThreshold", "type": "uint256"},
-        {"internalType": "uint256", "name": "liquidationBonus", "type": "uint256"},
-        {"internalType": "uint256", "name": "reserveFactor", "type": "uint256"},
-        {"internalType": "bool", "name": "usageAsCollateralEnabled", "type": "bool"},
-        {"internalType": "bool", "name": "borrowingEnabled", "type": "bool"},
-        {"internalType": "bool", "name": "stableBorrowRateEnabled", "type": "bool"},
-        {"internalType": "bool", "name": "isActive", "type": "bool"},
-        {"internalType": "bool", "name": "isFrozen", "type": "bool"},
-        {"internalType": "uint128", "name": "liquidityIndex", "type": "uint128"},
-        {"internalType": "uint128", "name": "variableBorrowIndex", "type": "uint128"},
-        {"internalType": "uint128", "name": "liquidityRate", "type": "uint128"},
-        {"internalType": "uint128", "name": "variableBorrowRate", "type": "uint128"},
-        {"internalType": "uint128", "name": "stableBorrowRate", "type": "uint128"},
-        {"internalType": "uint40", "name": "lastUpdateTimestamp", "type": "uint40"},
-        {"internalType": "address", "name": "aTokenAddress", "type": "address"},
-        {"internalType": "address", "name": "stableDebtTokenAddress", "type": "address"},
-        {"internalType": "address", "name": "variableDebtTokenAddress", "type": "address"},
-        {"internalType": "address", "name": "interestRateStrategyAddress", "type": "address"},
-        {"internalType": "uint256", "name": "availableLiquidity", "type": "uint256"},
-        {"internalType": "uint256", "name": "totalPrincipalStableDebt", "type": "uint256"},
-        {"internalType": "uint256", "name": "averageStableRate", "type": "uint256"},
-        {"internalType": "uint256", "name": "stableDebtLastUpdateTimestamp", "type": "uint256"},
-        {"internalType": "uint256", "name": "totalScalableVariableDebt", "type": "uint256"},
-        {"internalType": "uint256", "name": "unbacked", "type": "uint256"},
-        {"internalType": "uint256", "name": "isolationModeTotalDebt", "type": "uint256"},
-        {"internalType": "uint256", "name": "debtCeiling", "type": "uint256"},
-        {"internalType": "uint256", "name": "debtCeilingDecimals", "type": "uint256"},
-        {"internalType": "uint8", "name": "eModeId", "type": "uint8"},
-        {"internalType": "uint256", "name": "borrowCap", "type": "uint256"},
-        {"internalType": "uint256", "name": "supplyCap", "type": "uint256"},
-        {"internalType": "uint8", "name": "eModeLtv", "type": "uint8"},
-        {"internalType": "uint8", "name": "eModeLiquidationThreshold", "type": "uint8"},
-        {"internalType": "uint8", "name": "eModeLiquidationBonus", "type": "uint8"},
-        {"internalType": "address", "name": "eModePriceSource", "type": "address"},
-        {"internalType": "string", "name": "eModeLabel", "type": "string"},
-    ],
-    "internalType": "struct IUiPoolDataProviderV3.ReserveData[]",
-    "name": "reservesData",
-    "type": "tuple[]",
+GET_RESERVES_DATA_ABI = {
+  "inputs": [
+    {
+      "internalType": "contract IPoolAddressesProvider",
+      "name": "provider",
+      "type": "address"
+    }
+  ],
+  "name": "getReservesData",
+  "outputs": [
+    {
+      "components": [
+        {
+          "internalType": "address",
+          "name": "underlyingAsset",
+          "type": "address"
+        },
+        {
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "symbol",
+          "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "decimals",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "baseLTVasCollateral",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "reserveLiquidationThreshold",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "reserveLiquidationBonus",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "reserveFactor",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "usageAsCollateralEnabled",
+          "type": "bool"
+        },
+        {
+          "internalType": "bool",
+          "name": "borrowingEnabled",
+          "type": "bool"
+        },
+        {
+          "internalType": "bool",
+          "name": "isActive",
+          "type": "bool"
+        },
+        {
+          "internalType": "bool",
+          "name": "isFrozen",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint128",
+          "name": "liquidityIndex",
+          "type": "uint128"
+        },
+        {
+          "internalType": "uint128",
+          "name": "variableBorrowIndex",
+          "type": "uint128"
+        },
+        {
+          "internalType": "uint128",
+          "name": "liquidityRate",
+          "type": "uint128"
+        },
+        {
+          "internalType": "uint128",
+          "name": "variableBorrowRate",
+          "type": "uint128"
+        },
+        {
+          "internalType": "uint40",
+          "name": "lastUpdateTimestamp",
+          "type": "uint40"
+        },
+        {
+          "internalType": "address",
+          "name": "aTokenAddress",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "variableDebtTokenAddress",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "interestRateStrategyAddress",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "availableLiquidity",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "totalScaledVariableDebt",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "priceInMarketReferenceCurrency",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "priceOracle",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "variableRateSlope1",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "variableRateSlope2",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "baseVariableBorrowRate",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "optimalUsageRatio",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "isPaused",
+          "type": "bool"
+        },
+        {
+          "internalType": "bool",
+          "name": "isSiloedBorrowing",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint128",
+          "name": "accruedToTreasury",
+          "type": "uint128"
+        },
+        {
+          "internalType": "uint128",
+          "name": "unbacked",
+          "type": "uint128"
+        },
+        {
+          "internalType": "uint128",
+          "name": "isolationModeTotalDebt",
+          "type": "uint128"
+        },
+        {
+          "internalType": "bool",
+          "name": "flashLoanEnabled",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint256",
+          "name": "debtCeiling",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "debtCeilingDecimals",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "borrowCap",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "supplyCap",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "borrowableInIsolation",
+          "type": "bool"
+        },
+        {
+          "internalType": "bool",
+          "name": "virtualAccActive",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint128",
+          "name": "virtualUnderlyingBalance",
+          "type": "uint128"
+        }
+      ],
+      "internalType": "struct IUiPoolDataProviderV3.AggregatedReserveData[]",
+      "name": "",
+      "type": "tuple[]"
+    },
+    {
+      "components": [
+        {
+          "internalType": "uint256",
+          "name": "marketReferenceCurrencyUnit",
+          "type": "uint256"
+        },
+        {
+          "internalType": "int256",
+          "name": "marketReferenceCurrencyPriceInUsd",
+          "type": "int256"
+        },
+        {
+          "internalType": "int256",
+          "name": "networkBaseTokenPriceInUsd",
+          "type": "int256"
+        },
+        {
+          "internalType": "uint8",
+          "name": "networkBaseTokenPriceDecimals",
+          "type": "uint8"
+        }
+      ],
+      "internalType": "struct IUiPoolDataProviderV3.BaseCurrencyInfo",
+      "name": "",
+      "type": "tuple"
+    }
+  ],
+  "stateMutability": "view",
+  "type": "function"
 }
 
-GET_RESERVES_DATA_ABI = {
-    "inputs": [{"internalType": "address", "name": "provider", "type": "address"}],
-    "name": "getReservesData",
-    "outputs": [
-        RESERVE_DATA_STRUCT_ABI,
-        {"components": [
-            {"internalType": "address", "name": "asset", "type": "address"},
-            {"internalType": "uint256", "name": "priceInEth", "type": "uint256"}
-        ], "internalType": "struct IUiPoolDataProviderV3.BaseCurrencyInfo[]", "name": "baseCurrencyInfo", "type": "tuple[]"}
-    ],
-    "stateMutability": "view",
-    "type": "function",
-}
 
 GET_ASSET_PRICE_ABI = {
     "inputs": [{"internalType": "address", "name": "asset", "type": "address"}],
@@ -208,7 +401,20 @@ class AaveLiquidationAnalyzer:
                     "decimals": asset_decimals
                 }
         except Exception as e:
-            print(f"Error in fetch_all_reserves_data: {str(e)}")
+            with open('reserves_error.log', 'w') as f:
+                f.write(f"Error fetching reserves data:\n")
+                f.write(f"Exception type: {type(e).__name__}\n")
+                f.write(f"Exception message: {str(e)}\n\n")
+                f.write("Full traceback:\n")
+                traceback.print_exc(file=f)
+
+            error_msg = str(e)
+            if len(error_msg) > 200:
+                error_msg = error_msg[:200] + "... (see reserves_error.log for full details)"
+
+            print(f"✗ Error fetching reserves data: {error_msg}")
+            print(f"  Full error written to: reserves_error.log")
+            exit()
 
     def fetch_liquidations_from_db(self, limit: int = 5) -> List[Dict]:
         """
@@ -284,7 +490,13 @@ class AaveLiquidationAnalyzer:
                         first_liquidatable_block = %s,
                         first_liquidatable_time = %s,
                         latency_seconds = %s,
-                        blocks_liquidatable = %s
+                        blocks_liquidatable = %s,
+                        collateral_symbol = %s,
+                        collateral_decimals = %s,
+                        collateral_price_usd = %s,
+                        debt_symbol = %s,
+                        debt_decimals = %s,
+                        debt_price_usd = %s
                     WHERE transaction_hash = %s
                 """, (
                     'ANALYZED',
@@ -292,6 +504,13 @@ class AaveLiquidationAnalyzer:
                     analysis_result.get('first_liquidatable_time'),
                     int(analysis_result.get('time_liquidatable').total_seconds()) if analysis_result.get('time_liquidatable') else None,
                     analysis_result.get('blocks_liquidatable'),
+
+                    analysis_result.get('collateral_symbol'),
+                    analysis_result.get('collateral_decimals'),
+                    analysis_result.get('collateral_price_usd'),
+                    analysis_result.get('debt_symbol'),
+                    analysis_result.get('debt_decimals'),
+                    analysis_result.get('debt_price_usd'),
                     tx_hash
                 ))
 
@@ -602,7 +821,7 @@ class AaveLiquidationAnalyzer:
 def main():
 
     CHAIN_ID = int(os.getenv('CHAIN_ID', '1'))  # Default to Ethereum mainnet
-    BATCH_SIZE = int(os.getenv('BATCH_SIZE', '5'))
+    BATCH_SIZE = int(os.getenv('BATCH_SIZE', '100'))
     SEARCH_BLOCKS_BACK = int(os.getenv('SEARCH_BLOCKS_BACK', '50000'))
     LOOP_INTERVAL = int(os.getenv('LOOP_INTERVAL', '60'))
     RUN_ONCE = os.getenv('RUN_ONCE', 'false').lower() == 'true'

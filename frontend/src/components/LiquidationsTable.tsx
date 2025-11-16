@@ -14,6 +14,7 @@ import { useLiquidations } from '../hooks/useLiquidations';
 import makeBlockie from 'ethereum-blockies-base64';
 import Typography from '@mui/material/Typography';
 import { formatDistanceToNow } from 'date-fns';
+import numbro from 'numbro';
 
 interface LiquidationCall {
   id: string;
@@ -57,6 +58,31 @@ const userColumn = (value: string, row: LiquidationCall) => {
   </Box>
 }
 
+const formatUsd = (value: number) => {
+  if (value === 0) {
+    return '$0.00';
+  }
+  
+  return numbro(value).format({
+    average: true,
+    totalLength: 4,
+    mantissa: 2,
+    prefix: '$',
+  });
+};
+
+const formatTokenAmount = (value: number) => {
+  if (value > 0 && value < 0.01) {
+    return '< 0.01';
+  }
+
+  return numbro(value).format({
+    average: true,
+    totalLength: 4,
+    mantissa: 2,
+  });
+};
+
 const calculateTokenAmount = (rawAmount: bigint, tokenDecimals: number | null, tokenPrice: number | null) => {
   if (tokenDecimals == null || tokenPrice == null) {
     return { humanAmount: 0, usdValue: 0 };
@@ -91,11 +117,11 @@ const renderTokenAmount = (
           style={{ borderRadius: '50%' }}
         />
         <span style={{ color: 'var(--color-text)' }}>
-          {humanAmount < 0.01 ? '< 0.01' : humanAmount.toFixed(4)}
+          {formatTokenAmount(humanAmount)}
         </span>
       </Box>
       <Typography sx={{ fontSize: '0.9rem', color: 'var(--color-text-secondary)', paddingLeft: '32px' }}>
-        ${usdValue.toFixed(2)}
+          {formatUsd(usdValue)}
       </Typography>
     </Box>
   );
@@ -109,15 +135,28 @@ const tokenIconUrl = (token: string) => {
 }
 
 const liquidationBonus = (row: LiquidationCall) => {
-  const { 
-    usdValue: collateralUsd 
-  } = calculateTokenAmount(row.liquidated_collateral_amount, row.collateral_decimals, row.collateral_price_usd);
+  const { usdValue: collateralUsd } = calculateTokenAmount(
+    row.liquidated_collateral_amount, 
+    row.collateral_decimals, 
+    row.collateral_price_usd
+  );
 
-  const { 
-    usdValue: debtUsd 
-  } = calculateTokenAmount(row.debt_to_cover, row.debt_decimals, row.debt_price_usd);
+  const { usdValue: debtUsd } = calculateTokenAmount(
+    row.debt_to_cover, 
+    row.debt_decimals, 
+    row.debt_price_usd
+  );
  
-  return <div>{collateralUsd - debtUsd}</div>
+  const bonusUsd = collateralUsd - debtUsd;
+
+  return (
+    <Typography sx={{ 
+      color: bonusUsd > 0 ? 'var(--color-success)' : 'var(--color-text)', 
+      fontFamily: 'var(--font-family-values)'
+    }}>
+      {formatUsd(bonusUsd)}
+    </Typography>
+  );
 }
 
 const columns: readonly Column[] = [

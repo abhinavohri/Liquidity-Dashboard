@@ -13,7 +13,7 @@ import Alert from '@mui/material/Alert';
 import { useLiquidations } from '../hooks/useLiquidations';
 import makeBlockie from 'ethereum-blockies-base64';
 import Typography from '@mui/material/Typography';
-
+import { formatDistanceToNow } from 'date-fns';
 
 interface LiquidationCall {
   id: string;
@@ -43,14 +43,7 @@ interface LiquidationCall {
 }
 
 interface Column {
-  id:
-    | 'user'
-    | 'liquidator'
-    | 'liquidated_collateral_amount'
-    | 'debt_asset'
-    | 'debt_to_cover'
-    | 'block_timestamp'
-    | 'transaction_hash';
+  id: string;
   label: string;
   minWidth?: number;
   align?: 'right' | 'left';
@@ -64,6 +57,17 @@ const userColumn = (value: string, row: LiquidationCall) => {
   </Box>
 }
 
+const calculateTokenAmount = (rawAmount: bigint, tokenDecimals: number | null, tokenPrice: number | null) => {
+  if (tokenDecimals == null || tokenPrice == null) {
+    return { humanAmount: 0, usdValue: 0 };
+  }
+
+  const humanAmount = Number(rawAmount) / (10 ** tokenDecimals);
+  const usdValue = humanAmount * tokenPrice;
+
+  return { humanAmount, usdValue };
+}
+
 const renderTokenAmount = (
   rawAmount: bigint,
   tokenAddress: string,
@@ -74,8 +78,7 @@ const renderTokenAmount = (
     return <span style={{ color: 'var(--color-text-secondary)'}}>...</span>;
   }
 
-  const humanAmount = Number(rawAmount) / (10 ** tokenDecimals);
-  const usdValue = humanAmount * tokenPrice;
+  const { humanAmount, usdValue } = calculateTokenAmount(rawAmount, tokenDecimals, tokenPrice)
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
@@ -105,6 +108,18 @@ const tokenIconUrl = (token: string) => {
   return `${TRUST_WALLET_BASE_URL}${token}/logo.png`;
 }
 
+const liquidationBonus = (row: LiquidationCall) => {
+  const { 
+    usdValue: collateralUsd 
+  } = calculateTokenAmount(row.liquidated_collateral_amount, row.collateral_decimals, row.collateral_price_usd);
+
+  const { 
+    usdValue: debtUsd 
+  } = calculateTokenAmount(row.debt_to_cover, row.debt_decimals, row.debt_price_usd);
+ 
+  return <div>{collateralUsd - debtUsd}</div>
+}
+
 const columns: readonly Column[] = [
   {
     id: 'user',
@@ -124,11 +139,16 @@ const columns: readonly Column[] = [
     ),
   },
   {
-    id: 'debt_asset',
-    label: 'Debt Asset',
+    id: 'debt_to_cover',
+    label: 'Debt Repaid',
     minWidth: 120,
-    format: (value: string) => `${value.slice(0, 6)}...${value.slice(-4)}`,
-  },
+    format: (value, row) => renderTokenAmount(
+        value,
+        row.debt_asset,
+        row.debt_decimals,
+        row.debt_price_usd
+      ),
+    },
     {
     id: 'liquidator',
     label: 'Liquidator',
@@ -136,23 +156,21 @@ const columns: readonly Column[] = [
     format: userColumn,
   },
   {
-    id: 'debt_to_cover',
-    label: 'Debt to Cover',
+    id: 'liquidation_bonus',
+    label: 'Liquidation Bonus',
     minWidth: 150,
     align: 'right',
-    format: (value: bigint) => (Number(value) / 1e18).toFixed(4),
+    format: (value, row) => liquidationBonus(row),
   },
   {
     id: 'block_timestamp',
-    label: 'Timestamp',
+    label: 'Time',
     minWidth: 170,
-    format: (value: number) => new Date(value * 1000).toLocaleString(),
-  },
-  {
-    id: 'transaction_hash',
-    label: 'Tx Hash',
-    minWidth: 120,
-    format: (value: string) => `${value.slice(0, 6)}...${value.slice(-4)}`,
+    format: (value: number) => {
+      const date = new Date(value * 1000);
+      
+      return formatDistanceToNow(date, { addSuffix: true });
+    },
   },
 ];
 

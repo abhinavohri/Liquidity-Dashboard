@@ -12,13 +12,41 @@ import Box from '@mui/material/Box';
 import Alert from '@mui/material/Alert';
 import { useLiquidations } from '../hooks/useLiquidations';
 import makeBlockie from 'ethereum-blockies-base64';
+import Typography from '@mui/material/Typography';
 
+
+interface LiquidationCall {
+  id: string;
+  user: string;
+  liquidator: string;
+  collateral_asset: string;
+  debt_asset: string;
+  debt_to_cover: bigint;
+  liquidated_collateral_amount: bigint;
+  block_timestamp: number;
+  block_number: bigint;
+  transaction_hash: string;
+  analysis_status: string; // defaults to "PENDING"
+
+  first_liquidatable_block: bigint;
+  first_liquidatable_time: Date | null; // timestamp() usually maps to JS Date
+  latency_seconds: number | null;
+  blocks_liquidatable: number | null;
+
+  collateral_symbol: string | null;
+  collateral_decimals: number | null;
+  collateral_price_usd: number | null;
+
+  debt_symbol: string | null;
+  debt_decimals: number | null;
+  debt_price_usd: number | null;
+}
 
 interface Column {
   id:
     | 'user'
     | 'liquidator'
-    | 'collateral_asset'
+    | 'liquidated_collateral_amount'
     | 'debt_asset'
     | 'debt_to_cover'
     | 'block_timestamp'
@@ -26,40 +54,86 @@ interface Column {
   label: string;
   minWidth?: number;
   align?: 'right' | 'left';
-  format?: (value: any) => React.ReactNode;
+  format?: (value: any, row: LiquidationCall ) => React.ReactNode;
 }
 
-const userColumn = (value: string) => {
+const userColumn = (value: string, row: LiquidationCall) => {
   return <Box sx={{ display: 'flex', gap: '10px', alignItems: 'center'}}>
     <img className="blockie-icon" src={makeBlockie(value)} />
     {value.slice(0, 6)}...{value.slice(-4)}
   </Box>
 }
 
+const renderTokenAmount = (
+  rawAmount: bigint,
+  tokenAddress: string,
+  tokenDecimals: number | undefined | null,
+  tokenPrice: number | undefined | null
+) => {
+  if (tokenDecimals == null || tokenPrice == null) {
+    return <span style={{ color: 'var(--color-text-secondary)'}}>...</span>;
+  }
+
+  const humanAmount = Number(rawAmount) / (10 ** tokenDecimals);
+  const usdValue = humanAmount * tokenPrice;
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <img
+          src={tokenIconUrl(tokenAddress)}
+          alt=""
+          width={24}
+          height={24}
+          style={{ borderRadius: '50%' }}
+        />
+        <span style={{ color: 'var(--color-text)' }}>
+          {humanAmount < 0.01 ? '< 0.01' : humanAmount.toFixed(4)}
+        </span>
+      </Box>
+      <Typography sx={{ fontSize: '0.9rem', color: 'var(--color-text-secondary)', paddingLeft: '32px' }}>
+        ${usdValue.toFixed(2)}
+      </Typography>
+    </Box>
+  );
+};
+
+const TRUST_WALLET_BASE_URL = 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/';
+
+
+const tokenIconUrl = (token: string) => {
+  return `${TRUST_WALLET_BASE_URL}${token}/logo.png`;
+}
+
 const columns: readonly Column[] = [
   {
     id: 'user',
-    label: 'User',
+    label: 'Wallet',
     minWidth: 120,
     format: userColumn,
   },
   {
-    id: 'liquidator',
-    label: 'Liquidator',
-    minWidth: 120,
-    format: userColumn,
-  },
-  {
-    id: 'collateral_asset',
-    label: 'Collateral Asset',
-    minWidth: 120,
-    format: (value: string) => `${value.slice(0, 6)}...${value.slice(-4)}`,
+    id: 'liquidated_collateral_amount',
+    label: 'Collateral Liquidated',
+    minWidth: 60,
+    format: (value, row) => renderTokenAmount(
+        value,
+        row.collateral_asset,
+        row.collateral_decimals,
+        row.collateral_price_usd
+    ),
   },
   {
     id: 'debt_asset',
     label: 'Debt Asset',
     minWidth: 120,
     format: (value: string) => `${value.slice(0, 6)}...${value.slice(-4)}`,
+  },
+    {
+    id: 'liquidator',
+    label: 'Liquidator',
+    minWidth: 120,
+    format: userColumn,
   },
   {
     id: 'debt_to_cover',
@@ -184,7 +258,7 @@ export default function LiquidationsTable() {
                           },
                         }}
                       >
-                        {column.format ? column.format(value) : value}
+                        {column.format ? column.format(value, row) : value}
                       </TableCell>
                     );
                   })}

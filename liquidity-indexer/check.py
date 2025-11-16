@@ -444,7 +444,6 @@ class AaveLiquidationAnalyzer:
             if not records:
                 return []
 
-            # Format the DB records to match what analyze_liquidation_timeline expects
             for record in records:
                 formatted_events.append({
                     'tx_hash': record['transaction_hash'],
@@ -456,7 +455,7 @@ class AaveLiquidationAnalyzer:
                     'liquidated_collateral_amount': int(record['liquidated_collateral_amount']),
                     'liquidator': record['liquidator'],
                     'receive_atoken': record.get('receiveAToken'), # Use .get() for safety
-                    # 'liquidation_time': datetime.fromtimestamp(record['blockTimestamp'])
+                    'liquidation_time': datetime.fromtimestamp(record['block_timestamp'])
                 })
             return formatted_events
 
@@ -782,7 +781,7 @@ class AaveLiquidationAnalyzer:
         print("=== FINDING LATEST LIQUIDATION EVENTS ===")
 
         # Find latest liquidation events
-        events = self.find_latest_liquidation_events(n_events=num_liquidations)
+        events = self.fetch_liquidations_from_db(limit=num_liquidations)
 
         if not events:
             print("No liquidation events found!")

@@ -24,7 +24,8 @@
     "numbro": "^2.5.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "urql": "^5.0.1"
+    "urql": "^5.0.1",
+    "viem": "^2.39.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

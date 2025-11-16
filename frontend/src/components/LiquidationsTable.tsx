@@ -15,6 +15,8 @@ import makeBlockie from 'ethereum-blockies-base64';
 import Typography from '@mui/material/Typography';
 import { formatDistanceToNow } from 'date-fns';
 import numbro from 'numbro';
+import { getAddress } from "viem";
+
 
 interface LiquidationCall {
   id: string;
@@ -130,9 +132,8 @@ const renderTokenAmount = (
 const TRUST_WALLET_BASE_URL = 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/';
 
 
-const tokenIconUrl = (token: string) => {
-  return `${TRUST_WALLET_BASE_URL}${token}/logo.png`;
-}
+const tokenIconUrl = (addr: string) =>
+  `${TRUST_WALLET_BASE_URL}${getAddress(addr)}/logo.png`;
 
 const liquidationBonus = (row: LiquidationCall) => {
   const { usdValue: collateralUsd } = calculateTokenAmount(

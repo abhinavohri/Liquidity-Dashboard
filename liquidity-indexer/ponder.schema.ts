@@ -16,4 +16,12 @@ export const LiquidationCall = onchainTable("LiquidationCall", (t) => ({
   first_liquidatable_time: t.timestamp(),
   latency_seconds: t.integer(),
   blocks_liquidatable: t.integer(),
+
+  collateral_symbol: t.text(),
+  collateral_decimals: t.integer(),
+  collateral_price_usd: t.real(),
+  
+  debt_symbol: t.text(),
+  debt_decimals: t.integer(),
+  debt_price_usd: t.real(),
 }));

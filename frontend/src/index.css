@@ -63,6 +63,8 @@ h1 {
   font-size: var(--font-size-h1);
   line-height: var(--line-height-heading);
   color: var(--color-header);
+  font-family: var(--font-family-values);
+  font-weight: 600;
 }
 
 button {

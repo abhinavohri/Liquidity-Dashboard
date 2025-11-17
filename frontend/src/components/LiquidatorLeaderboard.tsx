@@ -1,3 +1,4 @@
+import * as React from 'react';
 import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -5,8 +6,11 @@ import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
+import TableSortLabel from '@mui/material/TableSortLabel';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import makeBlockie from 'ethereum-blockies-base64';
 import numbro from 'numbro';
 import type { LiquidatorStats } from '../hooks/useAnalytics';
@@ -15,70 +19,108 @@ interface LiquidatorLeaderboardProps {
   data: LiquidatorStats[];
 }
 
-const formatUsd = (value: number) => {
-  if (value === 0) {
-    return '$0.00';
-  }
+type Order = 'asc' | 'desc';
+type SortableColumn = 'totalProfit' | 'avgLatency' | 'count';
 
-  return numbro(value).format({
+const formatUsd = (value: number) => {
+  if (value === 0) return <><span style={{ color: '#808080' }}>$</span>0.00</>;
+  const formatted = numbro(value).format({
     average: true,
     totalLength: 4,
     mantissa: 2,
-    prefix: '$',
   });
+  // Extract number and suffix, capitalize suffix
+  const match = formatted.match(/^([\d.]+)([a-z]*)$/i);
+  if (match) {
+    const [, num, suffix] = match;
+    const upperSuffix = suffix.toUpperCase();
+    return (
+      <>
+        <span style={{ color: '#808080' }}>$</span>
+        {num}
+        {upperSuffix && <span style={{ color: '#808080' }}>{upperSuffix}</span>}
+      </>
+    );
+  }
+  return <><span style={{ color: '#808080' }}>$</span>{formatted}</>;
 };
 
 const formatLatency = (seconds: number) => {
   if (seconds < 60) {
-    return `${seconds.toFixed(1)}s`;
+    return (
+      <>
+        {seconds.toFixed(1)}
+        <span style={{ color: '#808080' }}>s</span>
+      </>
+    );
   }
   const minutes = seconds / 60;
   if (minutes < 60) {
-    return `${minutes.toFixed(1)}m`;
+    return (
+      <>
+        {minutes.toFixed(1)}
+        <span style={{ color: '#808080' }}>min</span>
+      </>
+    );
   }
   const hours = minutes / 60;
-  return `${hours.toFixed(1)}h`;
+  return (
+    <>
+      {hours.toFixed(1)}
+      <span style={{ color: '#808080' }}>h</span>
+    </>
+  );
 };
 
-export default function LiquidatorLeaderboard({
-  data,
-}: LiquidatorLeaderboardProps) {
-  // Show top 10 liquidators
-  const topLiquidators = data.slice(0, 10);
+export default function LiquidatorLeaderboard({ data }: LiquidatorLeaderboardProps) {
+  const [orderBy, setOrderBy] = React.useState<SortableColumn>('totalProfit');
+  const [order, setOrder] = React.useState<Order>('desc');
+
+  const handleRequestSort = (property: SortableColumn) => {
+    const isAsc = orderBy === property && order === 'asc';
+    setOrder(isAsc ? 'desc' : 'asc');
+    setOrderBy(property);
+  };
+
+  const sortedData = React.useMemo(() => {
+    return [...data].sort((a, b) => {
+      const aVal = a[orderBy];
+      const bVal = b[orderBy];
+      return order === 'asc' ? aVal - bVal : bVal - aVal;
+    });
+  }, [data, orderBy, order]);
+
+  const topLiquidators = sortedData.slice(0, 10);
 
   return (
     <Paper
       className="glass-border"
       sx={{
-        padding: 2,
         backgroundColor: 'transparent',
         borderRadius: 'var(--radius-md)',
+        overflow: 'hidden',
       }}
     >
-      <Box sx={{ marginBottom: 2 }}>
-        <Typography
-          variant="h6"
-          sx={{ color: 'var(--color-text)', fontWeight: 600 }}
-        >
+      <Box sx={{ padding: 2, borderBottom: '1px solid var(--border-color)' }}>
+        <Typography variant="h6" sx={{ color: 'var(--color-text)', fontWeight: 600 }}>
           Top Liquidators
         </Typography>
-        <Typography
-          variant="body2"
-          sx={{ color: 'var(--color-text-secondary)' }}
-        >
+        <Typography variant="body2" sx={{ color: 'var(--color-text-secondary)' }}>
           Ranked by total profit earned from liquidation bonuses
         </Typography>
       </Box>
+
       <TableContainer>
-        <Table size="small">
+        <Table>
           <TableHead>
             <TableRow>
               <TableCell
                 sx={{
                   color: 'var(--color-text)',
-                  fontWeight: 600,
+                  backgroundColor: 'var(--color-bg-card)',
+                  fontSize: '1.05rem',
+                  fontWeight: 500,
                   borderBottom: '1px solid var(--border-color)',
-                  backgroundColor: 'transparent',
                 }}
               >
                 Rank
@@ -86,9 +128,10 @@ export default function LiquidatorLeaderboard({
               <TableCell
                 sx={{
                   color: 'var(--color-text)',
-                  fontWeight: 600,
+                  backgroundColor: 'var(--color-bg-card)',
+                  fontSize: '1.05rem',
+                  fontWeight: 500,
                   borderBottom: '1px solid var(--border-color)',
-                  backgroundColor: 'transparent',
                 }}
               >
                 Liquidator
@@ -97,61 +140,109 @@ export default function LiquidatorLeaderboard({
                 align="right"
                 sx={{
                   color: 'var(--color-text)',
-                  fontWeight: 600,
+                  backgroundColor: 'var(--color-bg-card)',
+                  fontSize: '1.05rem',
+                  fontWeight: 500,
                   borderBottom: '1px solid var(--border-color)',
-                  backgroundColor: 'transparent',
                 }}
               >
-                Total Profit
+                <TableSortLabel
+                  active={orderBy === 'totalProfit'}
+                  direction={orderBy === 'totalProfit' ? order : 'asc'}
+                  onClick={() => handleRequestSort('totalProfit')}
+                  IconComponent={() =>
+                    orderBy === 'totalProfit' ? (
+                      order === 'desc' ? (
+                        <ArrowDownwardIcon sx={{ fontSize: '1rem', marginLeft: 0.5, color: 'var(--color-text)' }} />
+                      ) : (
+                        <ArrowUpwardIcon sx={{ fontSize: '1rem', marginLeft: 0.5, color: 'var(--color-text)' }} />
+                      )
+                    ) : (
+                      <ArrowDownwardIcon sx={{ fontSize: '1rem', marginLeft: 0.5, opacity: 0.3, color: 'var(--color-text)' }} />
+                    )
+                  }
+                  sx={{ color: 'var(--color-text) !important' }}
+                >
+                  Total Profit
+                </TableSortLabel>
               </TableCell>
               <TableCell
                 align="right"
                 sx={{
                   color: 'var(--color-text)',
-                  fontWeight: 600,
+                  backgroundColor: 'var(--color-bg-card)',
+                  fontSize: '1.05rem',
+                  fontWeight: 500,
                   borderBottom: '1px solid var(--border-color)',
-                  backgroundColor: 'transparent',
                 }}
               >
-                Avg Latency
+                <TableSortLabel
+                  active={orderBy === 'avgLatency'}
+                  direction={orderBy === 'avgLatency' ? order : 'asc'}
+                  onClick={() => handleRequestSort('avgLatency')}
+                  IconComponent={() =>
+                    orderBy === 'avgLatency' ? (
+                      order === 'desc' ? (
+                        <ArrowDownwardIcon sx={{ fontSize: '1rem', marginLeft: 0.5, color: 'var(--color-text)' }} />
+                      ) : (
+                        <ArrowUpwardIcon sx={{ fontSize: '1rem', marginLeft: 0.5, color: 'var(--color-text)' }} />
+                      )
+                    ) : (
+                      <ArrowDownwardIcon sx={{ fontSize: '1rem', marginLeft: 0.5, opacity: 0.3, color: 'var(--color-text)' }} />
+                    )
+                  }
+                  sx={{ color: 'var(--color-text) !important' }}
+                >
+                  Avg Latency
+                </TableSortLabel>
               </TableCell>
               <TableCell
                 align="right"
                 sx={{
                   color: 'var(--color-text)',
-                  fontWeight: 600,
+                  backgroundColor: 'var(--color-bg-card)',
+                  fontSize: '1.05rem',
+                  fontWeight: 500,
                   borderBottom: '1px solid var(--border-color)',
-                  backgroundColor: 'transparent',
                 }}
               >
-                # Liquidations
+                <TableSortLabel
+                  active={orderBy === 'count'}
+                  direction={orderBy === 'count' ? order : 'asc'}
+                  onClick={() => handleRequestSort('count')}
+                  IconComponent={() =>
+                    orderBy === 'count' ? (
+                      order === 'desc' ? (
+                        <ArrowDownwardIcon sx={{ fontSize: '1rem', marginLeft: 0.5, color: 'var(--color-text)' }} />
+                      ) : (
+                        <ArrowUpwardIcon sx={{ fontSize: '1rem', marginLeft: 0.5, color: 'var(--color-text)' }} />
+                      )
+                    ) : (
+                      <ArrowDownwardIcon sx={{ fontSize: '1rem', marginLeft: 0.5, opacity: 0.3, color: 'var(--color-text)' }} />
+                    )
+                  }
+                  sx={{ color: 'var(--color-text) !important' }}
+                >
+                  # Liquidations
+                </TableSortLabel>
               </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {topLiquidators.map((liquidator, index) => (
-              <TableRow key={liquidator.liquidator}>
+              <TableRow key={liquidator.liquidator} sx={{ backgroundColor: 'var(--color-bg-row)' }}>
                 <TableCell
                   sx={{
-                    color: 'var(--color-text-secondary)',
+                    color: 'var(--color-text)',
                     borderBottom: '1px solid var(--border-color)',
-                    fontWeight: 600,
+                    fontSize: '1.1rem',
+                    fontWeight: 500,
                   }}
                 >
                   #{index + 1}
                 </TableCell>
-                <TableCell
-                  sx={{
-                    borderBottom: '1px solid var(--border-color)',
-                  }}
-                >
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      gap: '10px',
-                      alignItems: 'center',
-                    }}
-                  >
+                <TableCell sx={{ borderBottom: '1px solid var(--border-color)' }}>
+                  <Box sx={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                     <img
                       className="blockie-icon"
                       src={makeBlockie(liquidator.liquidator)}
@@ -160,20 +251,22 @@ export default function LiquidatorLeaderboard({
                     />
                     <Typography
                       sx={{
-                        color: 'var(--color-text-secondary)',
+                        color: 'var(--color-text)',
                         fontFamily: 'monospace',
+                        fontSize: '1.1rem',
+                        fontWeight: 500,
                       }}
                     >
-                      {liquidator.liquidator.slice(0, 6)}...
-                      {liquidator.liquidator.slice(-4)}
+                      {liquidator.liquidator.slice(0, 6)}...{liquidator.liquidator.slice(-4)}
                     </Typography>
                   </Box>
                 </TableCell>
                 <TableCell
                   align="right"
                   sx={{
-                    color: 'var(--color-success)',
-                    fontWeight: 600,
+                    color: 'var(--color-text)',
+                    fontSize: '1.1rem',
+                    fontWeight: 500,
                     borderBottom: '1px solid var(--border-color)',
                     fontFamily: 'var(--font-family-values)',
                   }}
@@ -184,6 +277,8 @@ export default function LiquidatorLeaderboard({
                   align="right"
                   sx={{
                     color: 'var(--color-text)',
+                    fontSize: '1.1rem',
+                    fontWeight: 500,
                     borderBottom: '1px solid var(--border-color)',
                     fontFamily: 'var(--font-family-values)',
                   }}
@@ -194,6 +289,8 @@ export default function LiquidatorLeaderboard({
                   align="right"
                   sx={{
                     color: 'var(--color-text)',
+                    fontSize: '1.1rem',
+                    fontWeight: 500,
                     borderBottom: '1px solid var(--border-color)',
                     fontFamily: 'var(--font-family-values)',
                   }}

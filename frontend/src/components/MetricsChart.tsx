@@ -14,7 +14,7 @@ interface MetricsChartProps {
   onTimeFilterChange: (filter: TimeFilter) => void;
 }
 
-type MetricType = 'latency' | 'bonus' | 'debt' | 'collateral';
+type MetricType = 'latency' | 'bonus';
 
 const formatUsd = (value: number) => {
   if (value === 0) return '$0';
@@ -51,24 +51,6 @@ export default function MetricsChart({
           yAxisName: 'USD',
           color: '#4caf50',
           data: data.map(d => d.totalBonus),
-          formatter: formatUsd,
-        };
-      case 'debt':
-        return {
-          title: 'Daily Debt Repaid',
-          subtitle: 'Total debt covered through liquidations',
-          yAxisName: 'USD',
-          color: '#ff9800',
-          data: data.map(d => d.totalDebt),
-          formatter: formatUsd,
-        };
-      case 'collateral':
-        return {
-          title: 'Daily Collateral Liquidated',
-          subtitle: 'Total collateral value liquidated',
-          yAxisName: 'USD',
-          color: '#f44336',
-          data: data.map(d => d.totalCollateral),
           formatter: formatUsd,
         };
     }
@@ -212,7 +194,7 @@ export default function MetricsChart({
                 fontSize: '0.75rem',
                 padding: '4px 10px',
                 '&.Mui-selected': {
-                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  backgroundColor: 'var(--color-bg-row)',
                   color: 'var(--color-text)',
                 },
               },
@@ -220,8 +202,6 @@ export default function MetricsChart({
           >
             <ToggleButton value="latency">Latency</ToggleButton>
             <ToggleButton value="bonus">Bonus</ToggleButton>
-            <ToggleButton value="debt">Debt</ToggleButton>
-            <ToggleButton value="collateral">Collateral</ToggleButton>
           </ToggleButtonGroup>
         </Box>
       </Box>

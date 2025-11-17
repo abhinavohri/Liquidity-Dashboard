@@ -84,7 +84,7 @@ const getFilterCutoff = (filter: TimeFilter): number => {
   }
 };
 
-export function useAnalytics(timeFilter: TimeFilter = 'max') {
+export function useAnalytics(timeFilter: TimeFilter = 'max', minBonusThreshold: number = 0) {
   const [allData, setAllData] = useState<LiquidationData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -132,9 +132,25 @@ export function useAnalytics(timeFilter: TimeFilter = 'max') {
     }
 
     const cutoffTime = getFilterCutoff(timeFilter);
-    const filteredData = allData.filter(
-      liq => liq.block_timestamp * 1000 >= cutoffTime
-    );
+
+    // Filter by time and minimum bonus threshold
+    const filteredData = allData.filter(liq => {
+      if (liq.block_timestamp * 1000 < cutoffTime) return false;
+
+      const { usdValue: collateralUsd } = calculateTokenAmount(
+        liq.liquidated_collateral_amount,
+        liq.collateral_decimals,
+        liq.collateral_price_usd
+      );
+      const { usdValue: debtUsd } = calculateTokenAmount(
+        liq.debt_to_cover,
+        liq.debt_decimals,
+        liq.debt_price_usd
+      );
+      const bonus = collateralUsd - debtUsd;
+
+      return bonus >= minBonusThreshold;
+    });
 
     let totalLatency = 0;
     let latencyCount = 0;
@@ -252,7 +268,7 @@ export function useAnalytics(timeFilter: TimeFilter = 'max') {
       timeSeriesData,
       liquidatorStats,
     };
-  }, [allData, timeFilter]);
+  }, [allData, timeFilter, minBonusThreshold]);
 
   return {
     ...analytics,

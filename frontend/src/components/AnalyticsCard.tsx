@@ -5,10 +5,11 @@
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
+import type { ReactNode } from 'react';
 
 interface AnalyticsCard {
   header: string;
-  value: string;
+  value: ReactNode;
 }
 
 export default function AnalyticsCard({ header, value }: AnalyticsCard) {

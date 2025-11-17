@@ -12,7 +12,6 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Box from '@mui/material/Box';
 import Alert from '@mui/material/Alert';
 import TextField from '@mui/material/TextField';
-import InputAdornment from '@mui/material/InputAdornment';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Button from '@mui/material/Button';
@@ -332,15 +331,15 @@ export default function LiquidationsTable({ minBonusThreshold }: LiquidationsTab
     );
   }
 
-  const getCollateralCount = () =>
-    collateralFilter
-      ? thresholdFilteredData.filter((l: LiquidationCall) => l.collateral_symbol === collateralFilter).length
-      : 0;
+  // const getCollateralCount = () =>
+  //   collateralFilter
+  //     ? thresholdFilteredData.filter((l: LiquidationCall) => l.collateral_symbol === collateralFilter).length
+  //     : 0;
 
-  const getDebtCount = () =>
-    debtFilter
-      ? thresholdFilteredData.filter((l: LiquidationCall) => l.debt_symbol === debtFilter).length
-      : 0;
+  // const getDebtCount = () =>
+  //   debtFilter
+  //     ? thresholdFilteredData.filter((l: LiquidationCall) => l.debt_symbol === debtFilter).length
+  //     : 0;
 
   const pillButtonStyles = {
     borderRadius: '50px',

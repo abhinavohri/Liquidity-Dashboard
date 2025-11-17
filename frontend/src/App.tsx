@@ -79,7 +79,7 @@ interface DashboardProps {
 
 function Dashboard({ minBonusThreshold, onViewLiquidators }: DashboardProps) {
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('max');
-  const { summary, timeSeriesData, liquidatorStats, isLoading, error } =
+  const { summary, timeSeriesData, isLoading, error } =
     useAnalytics(timeFilter, minBonusThreshold);
 
   if (isLoading) {

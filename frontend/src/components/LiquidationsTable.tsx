@@ -24,8 +24,9 @@ interface LiquidationCall {
   liquidator: string;
   collateral_asset: string;
   debt_asset: string;
-  debt_to_cover: bigint;
-  liquidated_collateral_amount: bigint;
+  // Stored as text to preserve precision for large uint256 values
+  debt_to_cover: string;
+  liquidated_collateral_amount: string;
   block_timestamp: number;
   block_number: bigint;
   transaction_hash: string;
@@ -85,19 +86,29 @@ const formatTokenAmount = (value: number) => {
   });
 };
 
-const calculateTokenAmount = (rawAmount: bigint, tokenDecimals: number | null, tokenPrice: number | null) => {
+const calculateTokenAmount = (rawAmount: string, tokenDecimals: number | null, tokenPrice: number | null) => {
   if (tokenDecimals == null || tokenPrice == null) {
     return { humanAmount: 0, usdValue: 0 };
   }
 
-  const humanAmount = Number(rawAmount) / (10 ** tokenDecimals);
+  // Parse string to BigInt, then convert to number for calculation
+  const rawBigInt = BigInt(rawAmount);
+  const divisor = BigInt(10 ** tokenDecimals);
+
+  // For precision, we do the division in BigInt space first for whole part
+  // then handle the decimal part
+  const wholePart = rawBigInt / divisor;
+  const remainder = rawBigInt % divisor;
+
+  // Convert to human readable number
+  const humanAmount = Number(wholePart) + Number(remainder) / Number(divisor);
   const usdValue = humanAmount * tokenPrice;
 
   return { humanAmount, usdValue };
 }
 
 const renderTokenAmount = (
-  rawAmount: bigint,
+  rawAmount: string,
   tokenAddress: string,
   tokenDecimals: number | undefined | null,
   tokenPrice: number | undefined | null

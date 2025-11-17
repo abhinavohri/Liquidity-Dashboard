@@ -13,8 +13,9 @@ ponder.on("AaveV3Pool:LiquidationCall", async ({ event, context }) => {
     liquidator: args.liquidator,
     collateral_asset: args.collateralAsset,
     debt_asset: args.debtAsset,
-    debt_to_cover: args.debtToCover,
-    liquidated_collateral_amount: args.liquidatedCollateralAmount,
+    // Convert BigInt to string to preserve precision
+    debt_to_cover: args.debtToCover.toString(),
+    liquidated_collateral_amount: args.liquidatedCollateralAmount.toString(),
     block_timestamp: Number(event.block.timestamp),
     block_number: event.block.number,
     transaction_hash: event.transaction.hash,

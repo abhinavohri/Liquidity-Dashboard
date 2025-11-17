@@ -4,6 +4,7 @@ from datetime import datetime
 from web3 import Web3
 from typing import Dict, List, Optional
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from web3.middleware import ExtraDataToPOAMiddleware
 import psycopg2
@@ -381,6 +382,8 @@ class AaveLiquidationAnalyzer:
             abi=[GET_ASSET_PRICE_ABI]
         )
 
+        self.ensure_analysis_table_exists()
+
     def fetch_all_reserves_data(self):
         try:
             reserves_data = self.ui_pool_data_provider_contract.functions.getReservesData(
@@ -416,6 +419,61 @@ class AaveLiquidationAnalyzer:
             print(f"  Full error written to: reserves_error.log")
             exit()
 
+    def ensure_analysis_table_exists(self):
+        """
+        Check if LiquidationAnalysis table exists, create it if not
+        """
+        if not self.database_url:
+            print("Warning: DATABASE_URL not set, skipping table check.")
+            return
+
+        conn = None
+        try:
+            conn = psycopg2.connect(self.database_url)
+            with conn.cursor() as cur:
+                cur.execute("SET search_path TO public")
+
+                # Check if table exists
+                cur.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables
+                        WHERE table_schema = 'public'
+                        AND table_name = 'LiquidationAnalysis'
+                    )
+                """)
+                table_exists = cur.fetchone()[0]
+
+                if not table_exists:
+                    print("Creating LiquidationAnalysis table...")
+                    cur.execute("""
+                        CREATE TABLE "LiquidationAnalysis" (
+                            id TEXT PRIMARY KEY,
+                            first_liquidatable_block BIGINT,
+                            first_liquidatable_time TIMESTAMP,
+                            latency_seconds INTEGER,
+                            blocks_liquidatable BIGINT,
+                            collateral_symbol TEXT,
+                            collateral_decimals INTEGER,
+                            collateral_price_usd REAL,
+                            debt_symbol TEXT,
+                            debt_decimals INTEGER,
+                            debt_price_usd REAL
+                        )
+                    """)
+                    conn.commit()
+                    print("✓ LiquidationAnalysis table created successfully")
+                else:
+                    print("✓ LiquidationAnalysis table already exists")
+
+        except Exception as e:
+            print(f"Error checking/creating LiquidationAnalysis table: {e}")
+            traceback.print_exc()
+            if conn:
+                conn.rollback()
+        finally:
+            if conn:
+                conn.close()
+
     def fetch_liquidations_from_db(self, limit: int = 5) -> List[Dict]:
         """
         Fetch pending liquidations from the Ponder Postgres database
@@ -432,10 +490,13 @@ class AaveLiquidationAnalyzer:
                 cur.execute("SET search_path TO public")
 
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # Only fetch records that don't have analysis data yet
+                # This handles Ponder restarts where status resets but analysis exists
                 cur.execute("""
-                    SELECT * FROM "LiquidationCall"
-                    WHERE analysis_status = 'PENDING' OR analysis_status IS NULL
-                    ORDER BY "block_number" ASC
+                    SELECT lc.* FROM "LiquidationCall" lc
+                    LEFT JOIN "LiquidationAnalysis" la ON lc.id = la.id
+                    WHERE la.id IS NULL
+                    ORDER BY lc."block_number" ASC
                     LIMIT %s
                 """, (limit,))
 
@@ -445,14 +506,32 @@ class AaveLiquidationAnalyzer:
                 return []
 
             for record in records:
+                debt_to_cover = int(record['debt_to_cover'])
+                liquidated_collateral_amount = int(record['liquidated_collateral_amount'])
+
+                MAX_REALISTIC_AMOUNT = 10**30  # Very generous upper bound
+
+                if debt_to_cover > MAX_REALISTIC_AMOUNT or liquidated_collateral_amount > MAX_REALISTIC_AMOUNT:
+                    print(f"WARNING: Skipping tx {record['transaction_hash']} - corrupted amounts detected")
+                    print(f"  debt_to_cover: {debt_to_cover}")
+                    print(f"  liquidated_collateral_amount: {liquidated_collateral_amount}")
+                    # Mark as failed in DB
+                    self.mark_liquidation_failed(
+                        record['id'],
+                        record['transaction_hash'],
+                        f"Corrupted data: amounts exceed realistic bounds"
+                    )
+                    continue
+
                 formatted_events.append({
+                    'id': record['id'],  # Include id for the analysis table
                     'tx_hash': record['transaction_hash'],
                     'block_number': int(record['block_number']),
                     'user_address': record['user'],
                     'collateral_asset': record['collateral_asset'],
                     'debt_asset': record['debt_asset'],
-                    'debt_covered': int(record['debt_to_cover']),
-                    'liquidated_collateral_amount': int(record['liquidated_collateral_amount']),
+                    'debt_covered': debt_to_cover,
+                    'liquidated_collateral_amount': liquidated_collateral_amount,
                     'liquidator': record['liquidator'],
                     'receive_atoken': record.get('receiveAToken'), # Use .get() for safety
                     'liquidation_time': datetime.fromtimestamp(record['block_timestamp'])
@@ -467,9 +546,9 @@ class AaveLiquidationAnalyzer:
             if conn:
                 conn.close()
 
-    def update_liquidation_analysis(self, tx_hash: str, analysis_result: Dict) -> bool:
+    def update_liquidation_analysis(self, liquidation_id: str, tx_hash: str, analysis_result: Dict) -> bool:
         """
-        Update the liquidation record with analysis results
+        Insert analysis results into LiquidationAnalysis table and update status
         """
         if not self.database_url:
             print("Error: DATABASE_URL is not configured.")
@@ -481,37 +560,52 @@ class AaveLiquidationAnalyzer:
             with conn.cursor() as cur:
                 cur.execute("SET search_path TO public")
 
-                # Update the liquidation record with analysis data
+                # Insert into the new LiquidationAnalysis table
                 cur.execute("""
-                    UPDATE "LiquidationCall"
-                    SET
-                        analysis_status = %s,
-                        first_liquidatable_block = %s,
-                        first_liquidatable_time = %s,
-                        latency_seconds = %s,
-                        blocks_liquidatable = %s,
-                        collateral_symbol = %s,
-                        collateral_decimals = %s,
-                        collateral_price_usd = %s,
-                        debt_symbol = %s,
-                        debt_decimals = %s,
-                        debt_price_usd = %s
-                    WHERE transaction_hash = %s
+                    INSERT INTO "LiquidationAnalysis" (
+                        id,
+                        first_liquidatable_block,
+                        first_liquidatable_time,
+                        latency_seconds,
+                        blocks_liquidatable,
+                        collateral_symbol,
+                        collateral_decimals,
+                        collateral_price_usd,
+                        debt_symbol,
+                        debt_decimals,
+                        debt_price_usd
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (id) DO UPDATE SET
+                        first_liquidatable_block = EXCLUDED.first_liquidatable_block,
+                        first_liquidatable_time = EXCLUDED.first_liquidatable_time,
+                        latency_seconds = EXCLUDED.latency_seconds,
+                        blocks_liquidatable = EXCLUDED.blocks_liquidatable,
+                        collateral_symbol = EXCLUDED.collateral_symbol,
+                        collateral_decimals = EXCLUDED.collateral_decimals,
+                        collateral_price_usd = EXCLUDED.collateral_price_usd,
+                        debt_symbol = EXCLUDED.debt_symbol,
+                        debt_decimals = EXCLUDED.debt_decimals,
+                        debt_price_usd = EXCLUDED.debt_price_usd
                 """, (
-                    'ANALYZED',
+                    liquidation_id,
                     analysis_result.get('first_liquidatable_block'),
                     analysis_result.get('first_liquidatable_time'),
                     int(analysis_result.get('time_liquidatable').total_seconds()) if analysis_result.get('time_liquidatable') else None,
                     analysis_result.get('blocks_liquidatable'),
-
                     analysis_result.get('collateral_symbol'),
                     analysis_result.get('collateral_decimals'),
                     analysis_result.get('collateral_price_usd'),
                     analysis_result.get('debt_symbol'),
                     analysis_result.get('debt_decimals'),
                     analysis_result.get('debt_price_usd'),
-                    tx_hash
                 ))
+
+                # Update the status in LiquidationCall table
+                cur.execute("""
+                    UPDATE "LiquidationCall"
+                    SET analysis_status = %s
+                    WHERE id = %s
+                """, ('ANALYZED', liquidation_id))
 
                 conn.commit()
                 print(f"✓ Updated analysis for tx: {tx_hash}")
@@ -527,7 +621,7 @@ class AaveLiquidationAnalyzer:
             if conn:
                 conn.close()
 
-    def mark_liquidation_failed(self, tx_hash: str, error_message: str) -> bool:
+    def mark_liquidation_failed(self, liquidation_id: str, tx_hash: str, error_message: str) -> bool:
         """
         Mark a liquidation analysis as failed
         """
@@ -545,10 +639,10 @@ class AaveLiquidationAnalyzer:
                     UPDATE "LiquidationCall"
                     SET
                         analysis_status = %s
-                    WHERE transaction_hash = %s
+                    WHERE id = %s
                 """, (
                     'FAILED',
-                    tx_hash
+                    liquidation_id
                 ))
 
                 conn.commit()
@@ -671,7 +765,7 @@ class AaveLiquidationAnalyzer:
                 continue
 
             health_factor = account_data['health_factor']
-            print(f"Block {mid_block}: Health Factor = {health_factor:.4f}")
+            # print(f"Block {mid_block}: Health Factor = {health_factor:.4f}")
 
             if health_factor < 1.0:
                 first_liquidatable_block = mid_block
@@ -681,7 +775,6 @@ class AaveLiquidationAnalyzer:
 
             # Small delay to avoid rate limiting
             time.sleep(0.1)
-        print('first', first_liquidatable_block)
         return first_liquidatable_block if first_liquidatable_block else liquidation_block
 
     def get_block_timestamp(self, block_number: int) -> datetime:
@@ -706,17 +799,26 @@ class AaveLiquidationAnalyzer:
 
         historical_block = liquidation_event['block_number']
 
-        raw_collateral_price = self.price_oracle_contract.functions.getAssetPrice(
+        historical_price_oracle_address = self.provider_contract.functions.getPriceOracle().call(
+            block_identifier=historical_block
+        )
+
+        historical_price_oracle_contract = self.w3.eth.contract(
+            address=self.w3.to_checksum_address(historical_price_oracle_address),
+            abi=[GET_ASSET_PRICE_ABI]
+        )
+
+        raw_collateral_price = historical_price_oracle_contract.functions.getAssetPrice(
             self.w3.to_checksum_address(liquidation_event['collateral_asset'])
         ).call(block_identifier=historical_block)
 
-        raw_debt_price = self.price_oracle_contract.functions.getAssetPrice(
+        raw_debt_price = historical_price_oracle_contract.functions.getAssetPrice(
             self.w3.to_checksum_address(liquidation_event['debt_asset'])
         ).call(block_identifier=historical_block)
 
         collateral_price_usd = raw_collateral_price / (10**8)
         debt_price_usd = raw_debt_price / (10**8)
-        
+
         collateral_info = self.reserves_data_cache.get(liquidation_event['collateral_asset'].lower(), {})
         debt_info = self.reserves_data_cache.get(liquidation_event['debt_asset'].lower(), {})
 
@@ -771,12 +873,46 @@ class AaveLiquidationAnalyzer:
         else:
             return {"error": "Could not find when position became liquidatable"}
 
-    def analyze_latest_liquidations(self, num_liquidations: int = 5) -> List[Dict]:
+    def _process_single_liquidation(self, event: Dict) -> Dict:
         """
-        Find and analyze the latest liquidations automatically
+        Process a single liquidation event (used for parallel processing)
+
+        Returns:
+            Dict with 'success', 'result', 'event', and optionally 'error'
+        """
+        try:
+            result = self.analyze_liquidation_timeline(event)
+            if "error" not in result:
+                self.update_liquidation_analysis(event['id'], event['tx_hash'], result)
+                return {
+                    'success': True,
+                    'result': result,
+                    'event': event
+                }
+            else:
+                self.mark_liquidation_failed(event['id'], event['tx_hash'], result['error'])
+                return {
+                    'success': False,
+                    'event': event,
+                    'error': result['error']
+                }
+        except Exception as e:
+            error_msg = str(e)
+            self.mark_liquidation_failed(event['id'], event['tx_hash'], error_msg)
+            return {
+                'success': False,
+                'event': event,
+                'error': error_msg,
+                'traceback': traceback.format_exc()
+            }
+
+    def analyze_latest_liquidations(self, num_liquidations: int = 5, max_workers: int = 5) -> List[Dict]:
+        """
+        Find and analyze the latest liquidations automatically using parallel processing
 
         Args:
             num_liquidations: Number of latest liquidations to analyze
+            max_workers: Maximum number of parallel workers (default 5)
         """
         print("=== FINDING LATEST LIQUIDATION EVENTS ===")
 
@@ -788,31 +924,49 @@ class AaveLiquidationAnalyzer:
             return []
 
         print(f"\nFound {len(events)} liquidation events")
-        print("=== ANALYZING LIQUIDATION TIMELINES ===")
+        print(f"=== ANALYZING LIQUIDATION TIMELINES (using {max_workers} parallel workers) ===")
 
         results = []
+        failed_count = 0
 
-        # Analyze up to num_liquidations events
-        for i, event in enumerate(events[:num_liquidations]):
-            print(f"\n--- Analyzing Liquidation {i + 1}/{min(num_liquidations, len(events))} ---")
+        # Use ThreadPoolExecutor for parallel processing
+        actual_workers = min(max_workers, len(events))
 
-            try:
-                result = self.analyze_liquidation_timeline(event)
-                if "error" not in result:
-                    results.append(result)
-                    print(f"✓ Analysis complete for tx: {event['tx_hash']}")
+        with ThreadPoolExecutor(max_workers=actual_workers) as executor:
+            # Submit all tasks
+            future_to_event = {
+                executor.submit(self._process_single_liquidation, event): event
+                for event in events[:num_liquidations]
+            }
 
-                    self.update_liquidation_analysis(event['tx_hash'], result)
-                else:
+            # Process results as they complete
+            completed = 0
+            total = len(future_to_event)
+
+            for future in as_completed(future_to_event):
+                completed += 1
+                event = future_to_event[future]
+
+                try:
+                    process_result = future.result()
+
+                    if process_result['success']:
+                        results.append(process_result['result'])
+                        print(f"[{completed}/{total}] ✓ Analysis complete for tx: {event['tx_hash'][:16]}...")
+                    else:
+                        failed_count += 1
+                        print(f"[{completed}/{total}] ✗ Failed tx {event['tx_hash'][:16]}...: {process_result.get('error', 'Unknown error')}")
+                        if 'traceback' in process_result:
+                            print(f"    Traceback: {process_result['traceback'][:200]}...")
+
+                except Exception as e:
+                    failed_count += 1
+                    print(f"[{completed}/{total}] ✗ Exception for tx {event['tx_hash'][:16]}...: {e}")
                     traceback.print_exc()
-                    print(f"✗ Error analyzing tx {event['tx_hash']}: {result['error']}")
 
-                    self.mark_liquidation_failed(event['tx_hash'], result['error'])
-            except Exception as e:
-                traceback.print_exc()
-                print(f"✗ Exception analyzing tx {event['tx_hash']}: {e}")
-                self.mark_liquidation_failed(event['tx_hash'], str(e))
-                continue
+        print(f"\n=== PARALLEL PROCESSING COMPLETE ===")
+        print(f"Successfully analyzed: {len(results)}")
+        print(f"Failed: {failed_count}")
 
         return results
 
@@ -822,13 +976,15 @@ def main():
     CHAIN_ID = int(os.getenv('CHAIN_ID', '1'))  # Default to Ethereum mainnet
     BATCH_SIZE = int(os.getenv('BATCH_SIZE', '100'))
     SEARCH_BLOCKS_BACK = int(os.getenv('SEARCH_BLOCKS_BACK', '50000'))
-    LOOP_INTERVAL = int(os.getenv('LOOP_INTERVAL', '60'))
+    LOOP_INTERVAL = int(os.getenv('LOOP_INTERVAL', '10'))
+    MAX_WORKERS = int(os.getenv('MAX_WORKERS', '5'))  # Parallel workers
     RUN_ONCE = os.getenv('RUN_ONCE', 'false').lower() == 'true'
     print("Configuration:")
     print(f"  Chain ID: {CHAIN_ID}")
     print(f"  Batch Size: {BATCH_SIZE}")
     print(f"  Search Blocks Back: {SEARCH_BLOCKS_BACK}")
     print(f"  Loop Interval: {LOOP_INTERVAL} seconds")
+    print(f"  Max Workers: {MAX_WORKERS}")
     print(f"  Run Once: {RUN_ONCE}")
 
     try:
@@ -844,6 +1000,7 @@ def main():
             # Analyze pending liquidations from database
             results = analyzer.analyze_latest_liquidations(
                 num_liquidations=BATCH_SIZE,
+                max_workers=MAX_WORKERS,
             )
 
             print("\n=== ITERATION SUMMARY ===")

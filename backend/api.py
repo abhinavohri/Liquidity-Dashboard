@@ -3,6 +3,7 @@ import json
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import psycopg2
+from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 
@@ -32,41 +33,52 @@ def get_liquidations():
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(f"SET search_path TO {DATABASE_SCHEMA}")
-
             # Get total count
-            cur.execute('SELECT COUNT(*) as count FROM "LiquidationCall"')
+            cur.execute(
+                sql.SQL('SELECT COUNT(*) as count FROM {}.{}').format(
+                    sql.Identifier(DATABASE_SCHEMA),
+                    sql.Identifier('LiquidationCall')
+                )
+            )
             total_count = cur.fetchone()['count']
 
             # Get paginated data with LEFT JOIN to include records without analysis
-            cur.execute("""
-                SELECT
-                    lc.id,
-                    lc."user",
-                    lc.liquidator,
-                    lc.collateral_asset,
-                    lc.debt_asset,
-                    lc.debt_to_cover,
-                    lc.liquidated_collateral_amount,
-                    lc.block_timestamp,
-                    lc.block_number::text as block_number,
-                    lc.transaction_hash,
-                    lc.analysis_status,
-                    la.first_liquidatable_block::text as first_liquidatable_block,
-                    la.first_liquidatable_time,
-                    la.latency_seconds,
-                    la.blocks_liquidatable::text as blocks_liquidatable,
-                    la.collateral_symbol,
-                    la.collateral_decimals,
-                    la.collateral_price_usd,
-                    la.debt_symbol,
-                    la.debt_decimals,
-                    la.debt_price_usd
-                FROM "LiquidationCall" lc
-                LEFT JOIN "LiquidationAnalysis" la ON lc.id = la.id
-                ORDER BY lc.block_timestamp DESC
-                LIMIT %s OFFSET %s
-            """, (limit, offset))
+            cur.execute(
+                sql.SQL("""
+                    SELECT
+                        lc.id,
+                        lc."user",
+                        lc.liquidator,
+                        lc.collateral_asset,
+                        lc.debt_asset,
+                        lc.debt_to_cover,
+                        lc.liquidated_collateral_amount,
+                        lc.block_timestamp,
+                        lc.block_number::text as block_number,
+                        lc.transaction_hash,
+                        lc.analysis_status,
+                        la.first_liquidatable_block::text as first_liquidatable_block,
+                        la.first_liquidatable_time,
+                        la.latency_seconds,
+                        la.blocks_liquidatable::text as blocks_liquidatable,
+                        la.collateral_symbol,
+                        la.collateral_decimals,
+                        la.collateral_price_usd,
+                        la.debt_symbol,
+                        la.debt_decimals,
+                        la.debt_price_usd
+                    FROM {}.{} lc
+                    LEFT JOIN {}.{} la ON lc.id = la.id
+                    ORDER BY lc.block_timestamp DESC
+                    LIMIT %s OFFSET %s
+                """).format(
+                    sql.Identifier(DATABASE_SCHEMA),
+                    sql.Identifier('LiquidationCall'),
+                    sql.Identifier(DATABASE_SCHEMA),
+                    sql.Identifier('LiquidationAnalysis')
+                ),
+                (limit, offset)
+            )
 
             records = cur.fetchall()
 

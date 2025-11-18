@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from web3.middleware import ExtraDataToPOAMiddleware
 import psycopg2
+from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 
@@ -432,22 +433,10 @@ class AaveLiquidationAnalyzer:
         try:
             conn = psycopg2.connect(self.database_url)
             with conn.cursor() as cur:
-                cur.execute(f"SET search_path TO {self.database_schema}")
-
-                # Check if table exists
-                cur.execute("""
-                    SELECT EXISTS (
-                        SELECT FROM information_schema.tables
-                        WHERE table_schema = %s
-                        AND table_name = 'LiquidationAnalysis'
-                    )
-                """, (self.database_schema,))
-                table_exists = cur.fetchone()[0]
-
-                if not table_exists:
-                    print("Creating LiquidationAnalysis table...")
-                    cur.execute("""
-                        CREATE TABLE "LiquidationAnalysis" (
+                # Create table if it doesn't exist (idempotent operation)
+                cur.execute(
+                    sql.SQL("""
+                        CREATE TABLE IF NOT EXISTS {}.{} (
                             id TEXT PRIMARY KEY,
                             first_liquidatable_block BIGINT,
                             first_liquidatable_time TIMESTAMP,
@@ -460,11 +449,13 @@ class AaveLiquidationAnalyzer:
                             debt_decimals INTEGER,
                             debt_price_usd REAL
                         )
-                    """)
-                    conn.commit()
-                    print("✓ LiquidationAnalysis table created successfully")
-                else:
-                    print("✓ LiquidationAnalysis table already exists")
+                    """).format(
+                        sql.Identifier(self.database_schema),
+                        sql.Identifier('LiquidationAnalysis')
+                    )
+                )
+                conn.commit()
+                print("✓ LiquidationAnalysis table ready")
 
         except Exception as e:
             print(f"Error checking/creating LiquidationAnalysis table: {e}")
@@ -487,19 +478,24 @@ class AaveLiquidationAnalyzer:
         conn = None
         try:
             conn = psycopg2.connect(self.database_url)
-            with conn.cursor() as cur:
-                cur.execute(f"SET search_path TO {self.database_schema}")
-
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 # Only fetch records that don't have analysis data yet
                 # This handles Ponder restarts where status resets but analysis exists
-                cur.execute("""
-                    SELECT lc.* FROM "LiquidationCall" lc
-                    LEFT JOIN "LiquidationAnalysis" la ON lc.id = la.id
-                    WHERE la.id IS NULL
-                    ORDER BY lc."block_number" ASC
-                    LIMIT %s
-                """, (limit,))
+                cur.execute(
+                    sql.SQL("""
+                        SELECT lc.* FROM {}.{} lc
+                        LEFT JOIN {}.{} la ON lc.id = la.id
+                        WHERE la.id IS NULL
+                        ORDER BY lc.block_number ASC
+                        LIMIT %s
+                    """).format(
+                        sql.Identifier(self.database_schema),
+                        sql.Identifier('LiquidationCall'),
+                        sql.Identifier(self.database_schema),
+                        sql.Identifier('LiquidationAnalysis')
+                    ),
+                    (limit,)
+                )
 
                 records = cur.fetchall()
 
@@ -559,54 +555,64 @@ class AaveLiquidationAnalyzer:
         try:
             conn = psycopg2.connect(self.database_url)
             with conn.cursor() as cur:
-                cur.execute(f"SET search_path TO {self.database_schema}")
-
                 # Insert into the new LiquidationAnalysis table
-                cur.execute("""
-                    INSERT INTO "LiquidationAnalysis" (
-                        id,
-                        first_liquidatable_block,
-                        first_liquidatable_time,
-                        latency_seconds,
-                        blocks_liquidatable,
-                        collateral_symbol,
-                        collateral_decimals,
-                        collateral_price_usd,
-                        debt_symbol,
-                        debt_decimals,
-                        debt_price_usd
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (id) DO UPDATE SET
-                        first_liquidatable_block = EXCLUDED.first_liquidatable_block,
-                        first_liquidatable_time = EXCLUDED.first_liquidatable_time,
-                        latency_seconds = EXCLUDED.latency_seconds,
-                        blocks_liquidatable = EXCLUDED.blocks_liquidatable,
-                        collateral_symbol = EXCLUDED.collateral_symbol,
-                        collateral_decimals = EXCLUDED.collateral_decimals,
-                        collateral_price_usd = EXCLUDED.collateral_price_usd,
-                        debt_symbol = EXCLUDED.debt_symbol,
-                        debt_decimals = EXCLUDED.debt_decimals,
-                        debt_price_usd = EXCLUDED.debt_price_usd
-                """, (
-                    liquidation_id,
-                    analysis_result.get('first_liquidatable_block'),
-                    analysis_result.get('first_liquidatable_time'),
-                    int(analysis_result.get('time_liquidatable').total_seconds()) if analysis_result.get('time_liquidatable') else None,
-                    analysis_result.get('blocks_liquidatable'),
-                    analysis_result.get('collateral_symbol'),
-                    analysis_result.get('collateral_decimals'),
-                    analysis_result.get('collateral_price_usd'),
-                    analysis_result.get('debt_symbol'),
-                    analysis_result.get('debt_decimals'),
-                    analysis_result.get('debt_price_usd'),
-                ))
+                cur.execute(
+                    sql.SQL("""
+                        INSERT INTO {}.{} (
+                            id,
+                            first_liquidatable_block,
+                            first_liquidatable_time,
+                            latency_seconds,
+                            blocks_liquidatable,
+                            collateral_symbol,
+                            collateral_decimals,
+                            collateral_price_usd,
+                            debt_symbol,
+                            debt_decimals,
+                            debt_price_usd
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (id) DO UPDATE SET
+                            first_liquidatable_block = EXCLUDED.first_liquidatable_block,
+                            first_liquidatable_time = EXCLUDED.first_liquidatable_time,
+                            latency_seconds = EXCLUDED.latency_seconds,
+                            blocks_liquidatable = EXCLUDED.blocks_liquidatable,
+                            collateral_symbol = EXCLUDED.collateral_symbol,
+                            collateral_decimals = EXCLUDED.collateral_decimals,
+                            collateral_price_usd = EXCLUDED.collateral_price_usd,
+                            debt_symbol = EXCLUDED.debt_symbol,
+                            debt_decimals = EXCLUDED.debt_decimals,
+                            debt_price_usd = EXCLUDED.debt_price_usd
+                    """).format(
+                        sql.Identifier(self.database_schema),
+                        sql.Identifier('LiquidationAnalysis')
+                    ),
+                    (
+                        liquidation_id,
+                        analysis_result.get('first_liquidatable_block'),
+                        analysis_result.get('first_liquidatable_time'),
+                        int(analysis_result.get('time_liquidatable').total_seconds()) if analysis_result.get('time_liquidatable') else None,
+                        analysis_result.get('blocks_liquidatable'),
+                        analysis_result.get('collateral_symbol'),
+                        analysis_result.get('collateral_decimals'),
+                        analysis_result.get('collateral_price_usd'),
+                        analysis_result.get('debt_symbol'),
+                        analysis_result.get('debt_decimals'),
+                        analysis_result.get('debt_price_usd'),
+                    )
+                )
 
                 # Update the status in LiquidationCall table
-                cur.execute("""
-                    UPDATE "LiquidationCall"
-                    SET analysis_status = %s
-                    WHERE id = %s
-                """, ('ANALYZED', liquidation_id))
+                cur.execute(
+                    sql.SQL("""
+                        UPDATE {}.{}
+                        SET analysis_status = %s
+                        WHERE id = %s
+                    """).format(
+                        sql.Identifier(self.database_schema),
+                        sql.Identifier('LiquidationCall')
+                    ),
+                    ('ANALYZED', liquidation_id)
+                )
 
                 conn.commit()
                 print(f"✓ Updated analysis for tx: {tx_hash}")
@@ -634,17 +640,17 @@ class AaveLiquidationAnalyzer:
         try:
             conn = psycopg2.connect(self.database_url)
             with conn.cursor() as cur:
-                cur.execute(f"SET search_path TO {self.database_schema}")
-
-                cur.execute("""
-                    UPDATE "LiquidationCall"
-                    SET
-                        analysis_status = %s
-                    WHERE id = %s
-                """, (
-                    'FAILED',
-                    liquidation_id
-                ))
+                cur.execute(
+                    sql.SQL("""
+                        UPDATE {}.{}
+                        SET analysis_status = %s
+                        WHERE id = %s
+                    """).format(
+                        sql.Identifier(self.database_schema),
+                        sql.Identifier('LiquidationCall')
+                    ),
+                    ('FAILED', liquidation_id)
+                )
 
                 conn.commit()
                 print(f"✓ Marked tx as failed: {tx_hash}")

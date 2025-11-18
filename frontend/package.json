@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "start": "serve -s dist -l $PORT",
     "lint": "eslint .",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,html}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css,html}\"",
@@ -27,6 +28,7 @@
     "numbro": "^2.5.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "serve": "^14.2.5",
     "urql": "^5.0.1",
     "viem": "^2.39.0"
   },

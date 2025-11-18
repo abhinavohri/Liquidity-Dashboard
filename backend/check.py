@@ -339,6 +339,7 @@ class AaveLiquidationAnalyzer:
         self.w3 = Web3(Web3.HTTPProvider(self.rpc_urls[chain_id]))
         self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
         self.chain_id = chain_id
+        self.database_schema = os.getenv('DATABASE_SCHEMA', 'ponder')
         self.pool_addresses = {
             1: "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",  # Ethereum
             137: "0x794a61358D6845594F94dc1DB02A252b5b4814aD",  # Polygon
@@ -431,16 +432,16 @@ class AaveLiquidationAnalyzer:
         try:
             conn = psycopg2.connect(self.database_url)
             with conn.cursor() as cur:
-                cur.execute("SET search_path TO public")
+                cur.execute(f"SET search_path TO {self.database_schema}")
 
                 # Check if table exists
                 cur.execute("""
                     SELECT EXISTS (
                         SELECT FROM information_schema.tables
-                        WHERE table_schema = 'public'
+                        WHERE table_schema = %s
                         AND table_name = 'LiquidationAnalysis'
                     )
-                """)
+                """, (self.database_schema,))
                 table_exists = cur.fetchone()[0]
 
                 if not table_exists:
@@ -487,7 +488,7 @@ class AaveLiquidationAnalyzer:
         try:
             conn = psycopg2.connect(self.database_url)
             with conn.cursor() as cur:
-                cur.execute("SET search_path TO public")
+                cur.execute(f"SET search_path TO {self.database_schema}")
 
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 # Only fetch records that don't have analysis data yet
@@ -558,7 +559,7 @@ class AaveLiquidationAnalyzer:
         try:
             conn = psycopg2.connect(self.database_url)
             with conn.cursor() as cur:
-                cur.execute("SET search_path TO public")
+                cur.execute(f"SET search_path TO {self.database_schema}")
 
                 # Insert into the new LiquidationAnalysis table
                 cur.execute("""
@@ -633,7 +634,7 @@ class AaveLiquidationAnalyzer:
         try:
             conn = psycopg2.connect(self.database_url)
             with conn.cursor() as cur:
-                cur.execute("SET search_path TO public")
+                cur.execute(f"SET search_path TO {self.database_schema}")
 
                 cur.execute("""
                     UPDATE "LiquidationCall"

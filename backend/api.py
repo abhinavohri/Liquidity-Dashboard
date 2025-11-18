@@ -12,6 +12,7 @@ app = Flask(__name__)
 CORS(app)
 
 DATABASE_URL = os.getenv('DATABASE_URL')
+DATABASE_SCHEMA = os.getenv('DATABASE_SCHEMA', 'ponder')
 
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL)
@@ -31,7 +32,7 @@ def get_liquidations():
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SET search_path TO public")
+            cur.execute(f"SET search_path TO {DATABASE_SCHEMA}")
 
             # Get total count
             cur.execute('SELECT COUNT(*) as count FROM "LiquidationCall"')

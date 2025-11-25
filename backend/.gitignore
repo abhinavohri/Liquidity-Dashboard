@@ -1,0 +1,82 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# ---- Virtual Environment ----
+.env
+.env.local
+.venv
+env/
+venv/
+ENV/
+env.bak/
+
+# ---- Flask Environment Variables ----
+*.env
+*.flaskenv
+instance/
+
+# ---- Compiled / Generated ----
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+var/
+sdist/
+wheelhouse/
+pip-wheel-metadata/
+share/python-wheels/
+
+# ---- Logs ----
+*.log
+*.out
+*.err
+
+# ---- Cache ----
+.cache/
+pytest_cache/
+__pycache__/
+*.sqlite
+*.db
+*.sqlite3
+
+# ---- Coverage ----
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# ---- Jupyter Notebooks ----
+.ipynb_checkpoints/
+
+# ---- MyPy ----
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ---- Editors / IDE ----
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ---- OS Files ----
+.DS_Store
+Thumbs.db
+
+# ---- Local Secrets ----
+secret.key
+*.pem

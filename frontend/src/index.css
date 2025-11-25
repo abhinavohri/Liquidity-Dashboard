@@ -1,0 +1,107 @@
+:root {
+  --color-text: rgba(255, 255, 255, 0.87);
+  --color-text-secondary: #808080;
+  --border-color: rgba(255, 255, 255, 0.1);
+  --color-text-link: #646cff;
+  --color-text-link-hover: #535bf2;
+  --color-bg-page: #071311;
+  --color-bg-card: #071311;
+  --color-bg-button: var(--color-bg-card);
+  --color-bg-row: #111e1c;
+  --color-header: #caeae5;
+
+  /* Typography */
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-size-base: 1em;
+  --font-size-h1: 3.2em;
+  --line-height-base: 1.5;
+  --line-height-heading: 1.1;
+  --font-family-values: 'IBM Plex Mono';
+
+  /* Spacing */
+  --spacing-btn-y: 0.6em;
+  --spacing-btn-x: 1.2em;
+
+  /* Borders & Surfaces */
+  --radius-md: 18px;
+  --border-interactive: var(--color-text-link);
+
+  /* Apply base typography & colors */
+  font-family: var(--font-family-sans);
+  line-height: var(--line-height-base);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text);
+  background-color: var(--color-bg-page);
+
+  /* Other global settings from your original file */
+  color-scheme: dark; /* Set to dark only */
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-link);
+  text-decoration: inherit;
+}
+a:hover {
+  color: var(--color-text-link-hover);
+}
+
+/* body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+} */
+
+h1 {
+  font-size: var(--font-size-h1);
+  line-height: var(--line-height-heading);
+  color: var(--color-header);
+  font-family: var(--font-family-values);
+  font-weight: 600;
+}
+
+button {
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  padding: var(--spacing-btn-y) var(--spacing-btn-x);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  font-family: inherit;
+  background-color: var(--color-bg-button);
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  border-color: var(--border-interactive);
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+
+.main-container {
+  width: 100%;
+  max-width: 1400px;
+
+  margin: auto;
+}
+
+/* Card border effect */
+.glass-border {
+  /* border: 1px solid rgba(255, 255, 255, 0.15) !important; */
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+.blockie-icon {
+  height: 35px;
+  border-radius: 50%;
+}
